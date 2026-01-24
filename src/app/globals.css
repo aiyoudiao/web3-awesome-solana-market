@@ -1,0 +1,107 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Base Colors - Light Theme (Default) */
+    --color-background: 249 250 251; /* gray-50 */
+    --color-surface: 255 255 255;    /* white */
+    
+    /* Brand Colors */
+    --color-primary: 153 69 255;     /* #9945FF */
+    --color-secondary: 16 185 129;   /* emerald-500 */
+    
+    /* Text Colors */
+    --color-text-primary: 17 24 39;  /* gray-900 */
+    --color-text-secondary: 75 85 99; /* gray-600 */
+    --color-text-muted: 107 114 128; /* gray-500 */
+    
+    /* Border Colors */
+    --color-border: 229 231 235;     /* gray-200 */
+
+    /* Shadcn/UI Compat (Mapped to our vars where possible or kept default) */
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --primary-foreground: 210 40% 98%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 222.2 84% 4.9%;
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    /* Base Colors - Dark Theme */
+    --color-background: 27 27 31; /* #1B1B1F */
+    --color-surface: 43 43 48;    /* #2B2B30 */
+    
+    /* Brand Colors */
+    --color-primary: 153 69 255;  /* #9945FF */
+    --color-secondary: 20 241 149; /* #14F195 */
+    
+    /* Text Colors */
+    --color-text-primary: 255 255 255; /* #FFFFFF */
+    --color-text-secondary: 209 213 219; /* #D1D5DB */
+    --color-text-muted: 156 163 175; /* #9CA3AF */
+    
+    /* Border Colors */
+    --color-border: 75 85 99; /* #4B5563 */
+
+    /* Shadcn/UI Compat */
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 212.7 26.8% 83.9%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-text-primary transition-colors duration-300;
+  }
+}
+
+/* Custom Animations */
+@keyframes blob {
+  0% {
+    transform: translate(-50%, -50%) scale(1);
+  }
+  33% {
+    transform: translate(calc(-50% + 30px), calc(-50% - 50px)) scale(1.1);
+  }
+  66% {
+    transform: translate(calc(-50% - 20px), calc(-50% + 20px)) scale(0.9);
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+.animate-blob {
+  animation: blob 7s infinite;
+}
