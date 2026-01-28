@@ -63,7 +63,7 @@ cd web3-awesome-solana-market
 
 ### 2. 智能合约部署 (Contract)
 
-本项目包含完整的 Solana 智能合约 (`soldora`)。在运行前端之前，建议先在本地或 Devnet 部署合约。
+本项目包含完整的 Solana 智能合约 (`soldora`)。在运行前端之前，建议先在本地环境 (Localnet) 部署合约。
 
 ```bash
 # 进入合约目录
@@ -74,15 +74,31 @@ yarn install
 
 # 构建合约
 anchor build
+```
 
-# 运行测试 (可选)
-anchor test
+#### 启动本地测试链
+打开一个新的终端窗口，启动 Solana 本地验证器节点：
+```bash
+solana-test-validator
+```
 
-# 部署到 Devnet (确保已配置 solana config set --url devnet)
+#### 部署合约
+回到原来的终端，配置 Solana CLI 使用本地网络并部署：
+
+```bash
+# 配置为本地网络
+solana config set --url localhost
+
+# (可选) 领取本地测试币
+solana airdrop 100
+
+# 部署合约
 anchor deploy
 ```
 
-> 💡 **提示**: 部署成功后，请将生成的 Program ID 更新到 `Anchor.toml` 和前端 IDL 文件 `src/idl/soldora.json` 中的 `address` 字段。
+> 💡 **提示**: 
+> 1. 部署成功后，请将生成的 Program ID 更新到 `Anchor.toml` 和前端 IDL 文件 `src/idl/soldora.json` 中的 `address` 字段。
+> 2. 如果修改了 Program ID，需要重新运行 `anchor build` 和 `anchor deploy`。
 
 ### 3. 前端启动 (Frontend)
 
