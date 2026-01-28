@@ -5,6 +5,16 @@
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?style=flat-square&logo=typescript)
 ![License](https://img.shields.io/badge/License-AGPLv3-green?style=flat-square)
 
+> 💖 **致谢与致敬**
+>
+> 本项目由四位 Web3 Solana 领域的初学者共同打造。在黑客松倒计时的无数个深夜里，我们并肩作战，从零开始探索 Anchor 协议与链上交互。克服了重重技术壁垒，最终在截止前的最后一刻完成了这个作品。
+>
+> 特别感谢每一位成员的坚持与付出：
+> - [aiyoudiao](https://github.com/aiyoudiao)
+> - [JadeTwinkle](https://github.com/JadeTwinkle)
+> - [bcy97](https://github.com/bcy97)
+> - [Livian](https://github.com/Livian)
+
 **PolyScore** 是一个基于 Solana 构建的沉浸式体育/电竞预测市场平台。它打破了传统预测市场的枯燥表格形式，通过 Web3 技术与 3D 可视化交互的结合，为用户提供像“看比赛、切视角”一样直观、有趣的链上竞猜体验。
 
 > 🏆 本项目旨在参加 Solana 黑客松，探索 Consumer Crypto 应用的新形态。
@@ -211,12 +221,3 @@ pnpm dev
 ---
 
 *Built with ❤️ on Solana*
-
-## 💖 致谢
-
-特别感谢以下小伙伴，作为 Web3 Solana 的初学者，在 N 个深夜里并肩作战，克服重重困难，最终在这个最后的时间赶完了这个项目。
-
-- [peihao](https://github.com/aiyoudiao)
-- [Jade](https://github.com/JadeTwinkle)
-- [bcy97](https://github.com/bcy97)
-- [Livian](https://github.com/TLwen114514)
