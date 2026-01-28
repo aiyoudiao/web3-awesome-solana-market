@@ -194,7 +194,7 @@ pnpm dev
 
 ## 💖 致谢
 
-特别感谢以下小伙伴，作为 Web3 Solana 的初学者，他们在无数个深夜里并肩作战，克服重重困难，最终完成了这个项目。你们的坚持与努力是 PolyScore 诞生的关键！
+特别感谢以下小伙伴，作为 Web3 Solana 的初学者，在 N 个深夜里并肩作战，克服重重困难，最终在这个最后的时间赶完了这个项目。
 
 - [peihao](https://github.com/aiyoudiao)
 - [Jade](https://github.com/JadeTwinkle)
