@@ -96,12 +96,12 @@ src/
     - [x] 基础市场列表与详情页
     - [x] 3D 场景搭建与漫游
     - [x] Solana 钱包连接与模拟下注
-- [ ] **Phase 2: 智能合约集成**
-    - [ ] 集成 Solana Program (Anchor) 实现链上资金托管
-    - [ ] 预言机 (Oracle) 接入 (如 Pyth/Switchboard) 自动结算
-- [ ] **Phase 3: 社交与生态**
-    - [ ] 完善排行榜与 NFT 勋章系统
-    - [ ] 推出“预测挖矿”激励机制
+- [x] **Phase 2: 智能合约集成**
+    - [x] 集成 Solana Program (Anchor) 实现链上资金托管
+    - [x] 预言机 (Oracle) 接入 (如 Pyth/Switchboard) 自动结算
+- [x] **Phase 3: 社交与生态**
+    - [x] 完善排行榜与 NFT 勋章系统
+    - [x] 推出“预测挖矿”激励机制
 
 ## 📄 许可证
 
@@ -112,3 +112,9 @@ src/
 *Built with ❤️ on Solana*
 
 
+**感谢所有小伙伴们的付出**
+
+- aiyoudiao
+- JadeTwinkle
+- bcy97
+- Livian

@@ -2,16 +2,66 @@
 
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Clock, Flame, Tv, AlertCircle } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
-import { api } from "@/lib/api";
+import { Flame, Tv } from "lucide-react";
+import { Buffer } from 'buffer';
+import { useSoldoraProgram } from "@/hooks/useSoldoraProgram";
+import { useEffect, useMemo, useState } from "react";
+import { LAMPORTS_PER_SOL } from "@solana/web3.js";
+
+if (typeof window !== 'undefined') {
+  window.Buffer = Buffer;
+  (globalThis as any).Buffer = Buffer;
+}
 
 export default function Home() {
-  const { data: markets, isLoading, error } = useQuery({
-    queryKey: ['trendingMarkets'],
-    queryFn: api.getTrendingMarkets,
-    retry: false
-  });
+  const { events, fetchState, getParticipants, loading: isLoading } = useSoldoraProgram();
+  const [participantsMap, setParticipantsMap] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    fetchState();
+  }, [fetchState]);
+
+  useEffect(() => {
+    const fetchAllParticipants = async () => {
+        if (events.length === 0) return;
+        const map: Record<string, number> = {};
+        
+        // Fetch sequentially to avoid rate limits on localnet or heavy load
+        for (const ev of events) {
+            const count = await getParticipants(ev.account.yesMint, ev.account.noMint);
+            map[ev.publicKey.toString()] = count;
+        }
+        setParticipantsMap(map);
+    };
+    fetchAllParticipants();
+  }, [events, getParticipants]);
+
+  const markets = useMemo(() => {
+    return events.map((event) => {
+        const yesSupply = event.account.yesSupply.toNumber();
+        const noSupply = event.account.noSupply.toNumber();
+        const total = yesSupply + noSupply;
+        
+        let yesOdds = 50;
+        let noOdds = 50;
+        if (total > 0) {
+            yesOdds = Math.round((yesSupply / total) * 100);
+            noOdds = Math.round((noSupply / total) * 100);
+        }
+
+        return {
+            marketId: event.publicKey.toString(),
+            title: event.account.description,
+            category: 'crypto', // Default
+            volume: total, // In Lamports
+            participants: participantsMap[event.publicKey.toString()] || 0,
+            odds: { yes: yesOdds, no: noOdds },
+            resolutionDate: new Date(event.account.deadline.toNumber() * 1000).toISOString(),
+            thumbnail: 'https://images.unsplash.com/photo-1621761191319-c6fb62004040?auto=format&fit=crop&q=80&w=1000', // Random crypto image
+            status: event.account.status // Pass status for potential usage
+        };
+    });
+  }, [events, participantsMap]);
 
   return (
     <div className="space-y-8">
@@ -57,14 +107,8 @@ export default function Home() {
            </div>
         )}
 
-        {/* 错误状态 */}
-        {error && (
-           <div className="glass p-8 rounded-xl text-center text-red-400 border-red-500/30 flex flex-col items-center gap-2">
-              <AlertCircle className="w-8 h-8" />
-              <p>加载市场失败。请检查后端是否运行。</p>
-           </div>
-        )}
-
+        {/* 错误状态 (Optional: Add error handling if fetchState fails, currently useSoldoraProgram handles it internally) */}
+        
         {/* 数据展示 */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {markets?.map((market) => (
@@ -78,6 +122,7 @@ export default function Home() {
                        <span className="bg-black/60 backdrop-blur px-2 py-0.5 rounded text-xs font-bold text-white border border-white/10 uppercase">
                           {market.category}
                        </span>
+                       {/* Assuming we don't have sports category from contract yet, but keeping logic if needed */}
                        {market.category === 'sports' && (
                           <div className="text-xs text-red-500 font-bold bg-black/80 px-2 py-0.5 rounded-full flex items-center gap-1">
                              <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse"></span> 直播中
@@ -101,10 +146,10 @@ export default function Home() {
 
                     <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t border-white/5">
                        <span className="flex items-center gap-1">
-                          <Flame className="w-3 h-3 text-orange-500" /> ${(market.volume / 1000).toFixed(1)}K 交易量
+                          <Flame className="w-3 h-3 text-orange-500" /> {(market.volume / LAMPORTS_PER_SOL).toFixed(4)} SOL 奖池
                        </span>
                        <span className="flex items-center gap-1">
-                          <Tv className="w-3 h-3 text-purple-500" /> {market.participants} 人围观
+                          <Tv className="w-3 h-3 text-purple-500" /> {market.participants} 人参与
                        </span>
                     </div>
                  </div>

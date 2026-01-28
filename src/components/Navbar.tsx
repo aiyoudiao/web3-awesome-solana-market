@@ -8,9 +8,10 @@ import { Button } from "./ui/button";
 import { ThemeToggle } from "./ThemeToggle";
 import { CoolWalletButton } from "./CoolWalletButton";
 import { useStore } from "@/lib/store";
-import { Box, LayoutTemplate } from "lucide-react";
+import { Box, LayoutTemplate, Coins, Loader2 } from "lucide-react";
 import { Tooltip } from "./ui/Tooltip";
 import { clsx } from "clsx";
+import { useSoldoraProgram } from "@/hooks/useSoldoraProgram";
 
 /**
  * 导航栏组件
@@ -23,6 +24,7 @@ export function Navbar() {
   const { connected } = useWallet();
   const { isAuthenticated, login } = useAuth();
   const { viewMode, setViewMode } = useStore();
+  const { requestAirdrop, loading: programLoading } = useSoldoraProgram();
 
   const navItems = [
     { name: '市场', path: '/' },
@@ -45,6 +47,19 @@ export function Navbar() {
             POLY<span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-secondary">SCORE</span>
           </span>
         </Link>
+
+        {connected && (
+           <Button 
+               variant="ghost" 
+               size="sm" 
+               onClick={requestAirdrop} 
+               disabled={programLoading}
+               className="ml-4 hidden md:flex items-center gap-2 text-yellow-500 hover:text-yellow-400 hover:bg-yellow-500/10"
+           >
+               {programLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Coins className="w-4 h-4" />}
+               空投 10 SOL
+           </Button>
+        )}
 
         {/* Desktop Navigation */}
         <div className="hidden md:flex items-center gap-1 p-1 rounded-full bg-surface/50 border border-border/50">
@@ -76,7 +91,7 @@ export function Navbar() {
                   onClick={() => setViewMode('2d')}
                   className={clsx(
                     "p-2 rounded-full transition-all duration-300",
-                    viewMode === '2d' ? "bg-primary text-white shadow-md" : "text-text-secondary hover:text-text-primary"
+                    "bg-primary text-white shadow-md"
                   )}
                 >
                   <LayoutTemplate size={18} />
@@ -87,7 +102,7 @@ export function Navbar() {
                   onClick={() => setViewMode('3d')}
                   className={clsx(
                     "p-2 rounded-full transition-all duration-300",
-                    viewMode === '3d' ? "bg-primary text-white shadow-md" : "text-text-secondary hover:text-text-primary"
+                    "text-text-secondary hover:text-text-primary"
                   )}
                 >
                   <Box size={18} />

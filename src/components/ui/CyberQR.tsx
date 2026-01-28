@@ -26,7 +26,7 @@ export const CyberQR: React.FC<CyberQRProps> = ({
         image: logo,
         margin: 0,
         qrOptions: {
-            typeNumber: 11,
+            typeNumber: 0,
             mode: 'Byte',
             errorCorrectionLevel: 'Q'
         },

@@ -10,8 +10,11 @@ import { api } from "@/lib/api";
 import { Tooltip } from "@/components/ui/Tooltip";
 
 export default function CreatePrediction() {
+  console.log("CreatePrediction");
   const router = useRouter();
   const { publicKey } = useWallet();
+  console.log('publicKey', publicKey);
+  // const { createEvent } = useSoldoraProgram();
   
   const [formData, setFormData] = useState({
     title: '',
@@ -19,17 +22,25 @@ export default function CreatePrediction() {
     endTime: '',
   });
 
-  // 创建市场的 Mutation
+  // 创建市场的 Mutation (Backend API)
   const createMarketMutation = useMutation({
-    mutationFn: api.generateChallenge,
-    onSuccess: (data) => {
-      // 成功后跳转到首页或新创建的市场页
-      // 这里暂时跳回首页，因为列表页会刷新显示新数据(如果是真实后端)
-      alert(`预测事件创建成功！ID: ${data.id}`);
-      router.push('/');
+    mutationFn: async (data: { title: string; description: string; endTime: number }) => {
+      // 通过后端接口创建，由后端负责上链交互
+      return await api.generateChallenge({
+        type: 'custom',
+        title: data.title,
+        description: data.description,
+        creatorWallet: publicKey?.toString() || '',
+        endTime: data.endTime
+      });
     },
-    onError: (err) => {
-      alert("创建失败: " + err);
+    onSuccess: (data: any) => {
+      alert(`预测事件已提交审核！\n请等待管理员审核通过后上链。\nEvent ID: ${data.id}`);
+      router.push('/profile'); // Redirect to profile to see status
+    },
+    onError: (err: any) => {
+      console.error(err);
+      alert("创建失败: " + err.message);
     }
   });
 
@@ -53,11 +64,8 @@ export default function CreatePrediction() {
     }
 
     createMarketMutation.mutate({
-      type: 'market',
       title: formData.title,
       description: formData.description,
-      creatorWallet: publicKey.toBase58(),
-      // @ts-ignore - API 实际上支持 endTime，虽然类型定义可能还没更新
       endTime: endTime
     });
   };
@@ -68,14 +76,18 @@ export default function CreatePrediction() {
       "2025年人类会登陆火星吗？",
       "以太坊会在2024年底完成分片升级吗？",
       "Solana TPS 会在下个月突破10万吗？",
-      "下一场世界杯冠军会是巴西吗？"
+      "下一场世界杯冠军会是巴西吗？",
+      "下一场足球赛的胜者会是中国吗？",
+      "下一场篮球赛的胜者会是美国吗？",
     ];
     const randomDescriptions = [
       "只要在指定日期前价格触及该点位即视为达成。",
       "基于官方新闻发布为准。",
       "需要主网正式上线。",
       "以Solana官方浏览器数据为准。",
-      "FIFA官方结果为准。"
+      "FIFA官方结果为准。",
+      "NBA官方结果为准。",
+      "FIBA官方结果为准。",
     ];
 
     const randomIndex = Math.floor(Math.random() * randomTitles.length);

@@ -8,8 +8,8 @@ import { memo } from 'react';
 export const CyberpunkEnvironment = memo(() => {
   return (
     <>
-      {/* 城市夜景光照预设 */}
-      <Environment preset="city" blur={0.8} />
+      {/* 城市夜景光照预设 - 由于网络原因加载失败，暂时注释掉 */}
+      {/* <Environment preset="city" blur={0.8} /> */}
       
       {/* 基础环境光 - 增强亮度以照亮网格 */}
       <ambientLight intensity={0.8} color="#4c1d95" />

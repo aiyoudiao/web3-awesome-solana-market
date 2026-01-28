@@ -118,6 +118,13 @@ export const api = {
     return json.data;
   },
 
+  getUserEvents: async (walletAddress: string): Promise<Market[]> => {
+    const res = await fetch(`${API_BASE_URL}/user/${walletAddress}/events`);
+    if (!res.ok) throw new Error('获取用户创建事件失败');
+    const json = await res.json();
+    return json.data;
+  },
+
   // 创建挑战/市场
   generateChallenge: async (data: { 
     type: string; 
@@ -132,6 +139,44 @@ export const api = {
       body: JSON.stringify(data),
     });
     if (!res.ok) throw new Error('创建挑战失败');
+    const json = await res.json();
+    return json.data;
+  },
+
+  // Admin
+  getAdminEvents: async (status: string = 'pending') => {
+    const res = await fetch(`${API_BASE_URL}/admin/events?status=${status}`);
+    if (!res.ok) throw new Error('获取待审核事件失败');
+    const json = await res.json();
+    return json.data;
+  },
+
+  updateEventStatus: async (id: string, status: string, txSignature?: string) => {
+    const res = await fetch(`${API_BASE_URL}/admin/events/update-status`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, status, txSignature }),
+    });
+    if (!res.ok) throw new Error('更新状态失败');
+    const json = await res.json();
+    return json.data;
+  },
+
+  // 评论相关接口
+  getComments: async (marketId: string) => {
+    const res = await fetch(`${API_BASE_URL}/market/${marketId}/comments`);
+    if (!res.ok) throw new Error('获取评论失败');
+    const json = await res.json();
+    return json.data;
+  },
+
+  postComment: async (marketId: string, data: { userWallet: string, username?: string, content: string }) => {
+    const res = await fetch(`${API_BASE_URL}/market/${marketId}/comments`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) throw new Error('发表评论失败');
     const json = await res.json();
     return json.data;
   }

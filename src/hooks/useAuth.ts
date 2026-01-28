@@ -1,9 +1,11 @@
 import { useCallback, useState, useEffect } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
 import bs58 from 'bs58';
+import { useSoldoraProgram } from '@/hooks/useSoldoraProgram';
 
 export function useAuth() {
     const { publicKey, signMessage } = useWallet();
+    const { initializeTreasury } = useSoldoraProgram();
     const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [token, setToken] = useState<string | null>(null);
 
@@ -51,13 +53,24 @@ export function useAuth() {
             localStorage.setItem('token', data.token);
             setToken(data.token);
             setIsAuthenticated(true);
+
+            // 5. Initialize Treasury (Fire and Forget or await)
+            // Note: This will fail if already initialized, which is fine
+            try {
+                console.log("Attempting to initialize treasury...");
+                await initializeTreasury();
+                console.log("Treasury initialized successfully");
+            } catch (err: any) {
+                // Ignore error if already initialized (0x0 is custom error for already initialized usually, or other anchor errors)
+                console.log("Treasury initialization skipped or failed (likely already initialized):", err);
+            }
             
             return data.user;
         } catch (err) {
             console.error("Login failed:", err);
             throw err;
         }
-    }, [publicKey, signMessage]);
+    }, [publicKey, signMessage, initializeTreasury]);
 
     const logout = useCallback(() => {
         localStorage.removeItem('token');

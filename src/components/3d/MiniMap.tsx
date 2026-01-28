@@ -1,5 +1,10 @@
 import { memo } from 'react';
-import { Market } from '../../types';
+// 定义本地 Market 类型，避免引入不存在的模块
+type Market = {
+  id: string;
+  title: string;
+  // 可根据需要补充其他字段
+};
 
 interface MiniMapProps {
   markets: Market[];

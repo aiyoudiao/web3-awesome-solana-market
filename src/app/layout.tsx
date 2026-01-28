@@ -1,9 +1,16 @@
+import "@/lib/polyfill"; // Polyfill Buffer for Solana
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/Providers";
 import { AppEffects } from "@/components/AppEffects";
 import { ViewController } from "@/components/ViewController";
+import { Buffer } from 'buffer';
+
+if (typeof window !== 'undefined') {
+  window.Buffer = Buffer;
+  (globalThis as any).Buffer = Buffer;
+}
 
 const inter = Inter({ subsets: ["latin"] });
 

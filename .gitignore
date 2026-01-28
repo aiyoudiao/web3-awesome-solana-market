@@ -137,3 +137,42 @@ dist
 # Vite logs files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# Dependencies
+node_modules/
+.yarn/
+
+# Build outputs
+target/
+.anchor/
+dist/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Solana
+test-ledger/
+.config/
+
+# Keypairs (重要！不要提交私钥)
+*.json
+!package.json
+!tsconfig.json
+!Anchor.toml
+
+# 但保留这些 JSON
+!target/types/*.json
+!target/idl/*.json

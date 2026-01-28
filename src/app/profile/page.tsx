@@ -4,22 +4,50 @@ import { Button } from "@/components/ui/button";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import { Loader2, ExternalLink, X } from "lucide-react";
+import { Loader2, ExternalLink, X, Coins, FileText } from "lucide-react";
 import Link from "next/link";
 import { format } from "date-fns";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSoldoraProgram } from "@/hooks/useSoldoraProgram";
+import { LAMPORTS_PER_SOL } from "@solana/web3.js";
+import { clsx } from "clsx";
 
 export default function Profile() {
   const { publicKey } = useWallet();
   const walletAddress = publicKey?.toBase58();
   const queryClient = useQueryClient();
+  const { events, fetchState, fetchUserPositions, loading: programLoading } = useSoldoraProgram();
   
   const [isEditing, setIsEditing] = useState(false);
   const [newUsername, setNewUsername] = useState("");
+  const [positions, setPositions] = useState<any[]>([]);
+  const [loadingPositions, setLoadingPositions] = useState(false);
+
+  useEffect(() => {
+    fetchState();
+  }, [fetchState]);
+
+  useEffect(() => {
+    const loadPositions = async () => {
+        if (walletAddress && events.length > 0) {
+            setLoadingPositions(true);
+            const pos = await fetchUserPositions(walletAddress);
+            setPositions(pos);
+            setLoadingPositions(false);
+        }
+    };
+    loadPositions();
+  }, [walletAddress, events, fetchUserPositions]);
 
   const { data: profile, isLoading: isProfileLoading } = useQuery({
     queryKey: ['userProfile', walletAddress],
     queryFn: () => api.getUserProfile(walletAddress || ''),
+    enabled: !!walletAddress
+  });
+
+  const { data: userEvents, isLoading: isEventsLoading } = useQuery({
+    queryKey: ['userEvents', walletAddress],
+    queryFn: () => api.getUserEvents(walletAddress || ''),
     enabled: !!walletAddress
   });
 
@@ -44,12 +72,6 @@ export default function Profile() {
     updateProfileMutation.mutate({ username: newUsername });
   };
 
-  const { data: bets, isLoading: isBetsLoading } = useQuery({
-    queryKey: ['userBets', walletAddress],
-    queryFn: () => api.getUserBets(walletAddress || ''),
-    enabled: !!walletAddress
-  });
-
   if (!walletAddress) {
       return (
           <div className="py-20 text-center">
@@ -59,21 +81,21 @@ export default function Profile() {
       );
   }
 
-  if (isProfileLoading || isBetsLoading) {
+  if (isProfileLoading || (programLoading && events.length === 0)) {
       return <div className="flex justify-center p-20"><Loader2 className="animate-spin" /></div>;
   }
 
   return (
-    <div className="max-w-4xl mx-auto">
+    <div className="max-w-4xl mx-auto space-y-8">
       {/* 个人资料头部 */}
-      <div className="flex items-center gap-6 mb-8 p-6 border rounded-lg bg-card relative overflow-hidden">
+      <div className="flex items-center gap-6 p-6 border rounded-lg bg-card relative overflow-hidden">
         <div className="absolute top-0 right-0 p-4 opacity-10 font-black text-9xl">{profile?.level || '青铜'}</div>
         
         <div className="w-24 h-24 rounded-full bg-gradient-to-br from-primary to-purple-500 flex items-center justify-center text-3xl font-bold text-white relative z-10">
            {profile?.username?.charAt(0).toUpperCase() || 'U'}
         </div>
         <div className="flex-1 relative z-10">
-          <h1 className="text-3xl font-bold font-heading mb-2">{profile?.username || '未知用户'}</h1>
+          <h1 className="text-3xl font-bold font-heading mb-2">{profile?.username || '用户'}</h1>
           <div className="flex gap-4">
              <div className="text-sm">排名: <span className="font-bold text-yellow-500">{profile?.rank || '未排名'}</span></div>
              <div className="text-sm">积分: <span className="font-bold">{profile?.totalPoints || 0} RP</span></div>
@@ -122,51 +144,118 @@ export default function Profile() {
       )}
 
       {/* 持仓与历史 */}
-      <h2 className="text-2xl font-bold font-heading mb-4">我的持仓与历史</h2>
-      <div className="border rounded-lg bg-card overflow-hidden">
-        {bets && bets.length > 0 ? (
-        <table className="w-full">
-           <thead className="bg-secondary/10">
-             <tr>
-               <th className="px-6 py-4 text-left text-sm font-bold text-muted-foreground">市场</th>
-               <th className="px-6 py-4 text-left text-sm font-bold text-muted-foreground">结果</th>
-               <th className="px-6 py-4 text-right text-sm font-bold text-muted-foreground">金额</th>
-               <th className="px-6 py-4 text-right text-sm font-bold text-muted-foreground">预估价值</th>
-               <th className="px-6 py-4 text-right text-sm font-bold text-muted-foreground">日期</th>
-             </tr>
-           </thead>
-           <tbody className="divide-y divide-white/5">
-             {bets.map((bet) => (
-             <tr key={bet.id} className="hover:bg-secondary/5 transition-colors">
-                <td className="px-6 py-4">
-                    <Link href={`/market/${bet.marketId}`} className="hover:text-primary flex items-center gap-2 group">
-                        {bet.marketImage && <img src={bet.marketImage} className="w-8 h-8 rounded object-cover" />}
-                        <span className="group-hover:underline truncate max-w-[200px]">{bet.marketTitle}</span>
-                        <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+      <div>
+          <h2 className="text-2xl font-bold font-heading mb-4 flex items-center gap-2">
+              <Coins className="w-6 h-6 text-yellow-500" />
+              我的持仓与历史
+              {loadingPositions && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
+          </h2>
+          <div className="border rounded-lg bg-card overflow-hidden">
+            {positions && positions.length > 0 ? (
+            <table className="w-full">
+               <thead className="bg-secondary/10">
+                 <tr>
+                   <th className="px-6 py-4 text-left text-sm font-bold text-muted-foreground">市场</th>
+                   <th className="px-6 py-4 text-left text-sm font-bold text-muted-foreground">结果</th>
+                   <th className="px-6 py-4 text-right text-sm font-bold text-muted-foreground">持仓量</th>
+                   <th className="px-6 py-4 text-right text-sm font-bold text-muted-foreground">预估价值 (SOL)</th>
+                   <th className="px-6 py-4 text-right text-sm font-bold text-muted-foreground">状态</th>
+                 </tr>
+               </thead>
+               <tbody className="divide-y divide-white/5">
+                 {positions.map((pos, idx) => (
+                 <tr key={idx} className="hover:bg-secondary/5 transition-colors">
+                    <td className="px-6 py-4">
+                        <Link href={`/market/${pos.marketId}`} className="hover:text-primary flex items-center gap-2 group">
+                            <span className="group-hover:underline truncate max-w-[200px]">{pos.marketTitle}</span>
+                            <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        </Link>
+                    </td>
+                    <td className="px-6 py-4">
+                        <span className={pos.outcome === 'yes' ? "text-green-500 font-bold uppercase" : "text-red-500 font-bold uppercase"}>
+                            {pos.outcome}
+                        </span>
+                    </td>
+                    <td className="px-6 py-4 text-right font-mono">{pos.amount.toFixed(2)}</td>
+                    <td className="px-6 py-4 text-right font-mono text-green-400">{(pos.amount).toFixed(4)}</td>
+                    <td className="px-6 py-4 text-right text-xs">
+                        <span className={clsx(
+                            "px-2 py-1 rounded text-xs font-bold",
+                            pos.status.active ? "bg-green-500/20 text-green-500" : "bg-gray-500/20 text-gray-400"
+                        )}>
+                            {pos.status.active ? '进行中' : '已结束'}
+                        </span>
+                    </td>
+                 </tr>
+                 ))}
+               </tbody>
+            </table>
+            ) : (
+                <div className="p-12 text-center text-muted-foreground">
+                    <p>暂无持仓记录。开始交易以查看您的持仓！</p>
+                    <Link href="/">
+                        <Button className="mt-4" variant="secondary">浏览市场</Button>
                     </Link>
-                </td>
-                <td className="px-6 py-4">
-                    <span className={bet.outcome === 'yes' ? "text-green-500 font-bold uppercase" : "text-red-500 font-bold uppercase"}>
-                        {bet.outcome}
-                    </span>
-                </td>
-                <td className="px-6 py-4 text-right font-mono">{bet.amount} SOL</td>
-                <td className="px-6 py-4 text-right font-mono text-green-400">${bet.value.toFixed(2)}</td>
-                <td className="px-6 py-4 text-right text-xs text-muted-foreground">
-                    {format(new Date(bet.date), 'MMM d, yyyy')}
-                </td>
-             </tr>
-             ))}
-           </tbody>
-        </table>
-        ) : (
-            <div className="p-12 text-center text-muted-foreground">
-                <p>暂无下注记录。开始交易以查看您的持仓！</p>
-                <Link href="/">
-                    <Button className="mt-4" variant="secondary">浏览市场</Button>
-                </Link>
-            </div>
-        )}
+                </div>
+            )}
+          </div>
+      </div>
+
+      {/* 创建记录 */}
+      <div>
+          <h2 className="text-2xl font-bold font-heading mb-4 flex items-center gap-2">
+              <FileText className="w-6 h-6 text-blue-500" />
+              我创建的事件
+              {isEventsLoading && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
+          </h2>
+          <div className="border rounded-lg bg-card overflow-hidden">
+            {userEvents && userEvents.length > 0 ? (
+            <table className="w-full">
+               <thead className="bg-secondary/10">
+                 <tr>
+                   <th className="px-6 py-4 text-left text-sm font-bold text-muted-foreground">标题</th>
+                   <th className="px-6 py-4 text-left text-sm font-bold text-muted-foreground">创建时间</th>
+                   <th className="px-6 py-4 text-left text-sm font-bold text-muted-foreground">截止时间</th>
+                   <th className="px-6 py-4 text-right text-sm font-bold text-muted-foreground">状态</th>
+                 </tr>
+               </thead>
+               <tbody className="divide-y divide-white/5">
+                 {userEvents.map((ev: any, idx: number) => (
+                 <tr key={idx} className="hover:bg-secondary/5 transition-colors">
+                    <td className="px-6 py-4">
+                        <div className="font-bold">{ev.title || "Untitled"}</div>
+                        <div className="text-xs text-muted-foreground line-clamp-1">{ev.description}</div>
+                    </td>
+                    <td className="px-6 py-4 text-sm font-mono">
+                        {ev.created_at ? format(new Date(ev.created_at), 'yyyy-MM-dd HH:mm') : '-'}
+                    </td>
+                    <td className="px-6 py-4 text-sm font-mono">
+                        {ev.end_time ? format(new Date(Number(ev.end_time)), 'yyyy-MM-dd HH:mm') : '-'}
+                    </td>
+                    <td className="px-6 py-4 text-right text-xs">
+                        <span className={clsx(
+                            "px-2 py-1 rounded text-xs font-bold",
+                            ev.status === 'approved' ? "bg-green-500/20 text-green-500" : 
+                            ev.status === 'rejected' ? "bg-red-500/20 text-red-500" :
+                            "bg-yellow-500/20 text-yellow-500"
+                        )}>
+                            {ev.status === 'approved' ? '已通过' : 
+                             ev.status === 'rejected' ? '已拒绝' : '审核中'}
+                        </span>
+                    </td>
+                 </tr>
+                 ))}
+               </tbody>
+            </table>
+            ) : (
+                <div className="p-12 text-center text-muted-foreground">
+                    <p>暂无创建记录。去创建一个属于你的预测市场吧！</p>
+                    <Link href="/create">
+                        <Button className="mt-4" variant="secondary">创建事件</Button>
+                    </Link>
+                </div>
+            )}
+          </div>
       </div>
     </div>
   );

@@ -14,10 +14,12 @@
   "license": "GNU AFFERO GENERAL PUBLIC LICENSE Version 3, 19 November 2007",
   "packageManager": "pnpm@10.28.1",
   "dependencies": {
+    "@coral-xyz/anchor": "^0.32.1",
     "@radix-ui/react-dialog": "^1.1.15",
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.5.0",
     "@react-three/postprocessing": "^3.0.4",
+    "@solana/spl-token": "^0.4.14",
     "@solana/wallet-adapter-base": "^0.9.27",
     "@solana/wallet-adapter-react": "^0.15.39",
     "@solana/wallet-adapter-react-ui": "^0.9.39",
@@ -27,6 +29,7 @@
     "@tanstack/react-query": "^5.90.20",
     "@types/three": "^0.182.0",
     "bs58": "^6.0.0",
+    "buffer": "^6.0.3",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
     "framer-motion": "^12.29.0",
@@ -42,6 +45,8 @@
     "tailwind-merge": "^3.4.0",
     "tailwindcss-animate": "^1.0.7",
     "three": "^0.182.0",
+    "three-stdlib": "^2.36.1",
+    "tweetnacl": "^1.0.3",
     "zustand": "^5.0.10"
   },
   "devDependencies": {
