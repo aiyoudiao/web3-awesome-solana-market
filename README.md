@@ -180,7 +180,7 @@ pnpm dev
 
 特别感谢以下小伙伴，作为 Web3 Solana 的初学者，他们在无数个深夜里并肩作战，克服重重困难，最终完成了这个项目。你们的坚持与努力是 PolyScore 诞生的关键！
 
-- **aiyoudiao**
-- **JadeTwinkle**
-- **bcy97**
-- **Livian**
+- [peihao](https://github.com/aiyoudiao)
+- [Jade](https://github.com/JadeTwinkle)
+- [bcy97](https://github.com/bcy97)
+- [Livian](https://github.com/TLwen114514)
