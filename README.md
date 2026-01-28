@@ -57,7 +57,7 @@
 
 ### 1. 克隆项目
 ```bash
-git clone https://github.com/your-repo/web3-awesome-solana-market.git
+git clone https://github.com/aiyoudiao/web3-awesome-solana-market.git
 cd web3-awesome-solana-market
 ```
 
@@ -82,7 +82,7 @@ anchor test
 anchor deploy
 ```
 
-> 💡 **提示**: 部署成功后，请将生成的 Program ID 更新到 `Anchor.toml` 和前端配置文件 `src/lib/soldora-idl.ts` 或环境变量中。
+> 💡 **提示**: 部署成功后，请将生成的 Program ID 更新到 `Anchor.toml` 和前端 IDL 文件 `src/idl/soldora.json` 中的 `address` 字段。
 
 ### 3. 前端启动 (Frontend)
 
