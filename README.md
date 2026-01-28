@@ -13,7 +13,7 @@
 > - [aiyoudiao](https://github.com/aiyoudiao)
 > - [bcy97](https://github.com/bcy97)
 > - [JadeTwinkle](https://github.com/JadeTwinkle)
-> - [Livian](https://github.com/Livian)
+> - [Livian](https://github.com/TLw114514)
 
 **PolyScore** 是一个基于 Solana 构建的沉浸式体育/电竞预测市场平台。它打破了传统预测市场的枯燥表格形式，通过 Web3 技术与 3D 可视化交互的结合，为用户提供像“看比赛、切视角”一样直观、有趣的链上竞猜体验。
 
