@@ -10,10 +10,10 @@
 > 本项目由四位 Web3 Solana 领域的初学者共同打造。在黑客松倒计时的无数个深夜里，我们并肩作战，从零开始探索 Anchor 协议与链上交互。克服了重重技术壁垒，最终在截止前的最后一刻完成了这个作品。
 >
 > 特别感谢每一位成员的坚持与付出：
-> - [aiyoudiao](https://github.com/aiyoudiao)
-> - [bcy97](https://github.com/bcy97)
-> - [JadeTwinkle](https://github.com/JadeTwinkle)
+> - [Btrain](https://github.com/bcy97)
+> - [Jade](https://github.com/JadeTwinkle)
 > - [Livian](https://github.com/TLwen114514)
+> - [peihao](https://github.com/aiyoudiao)
 
 **PolyScore** 是一个基于 Solana 构建的沉浸式体育/电竞预测市场平台。它打破了传统预测市场的枯燥表格形式，通过 Web3 技术与 3D 可视化交互的结合，为用户提供像“看比赛、切视角”一样直观、有趣的链上竞猜体验。
 
