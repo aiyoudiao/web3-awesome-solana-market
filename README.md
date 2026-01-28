@@ -9,7 +9,7 @@
 
 > 🏆 本项目旨在参加 Solana 黑客松，探索 Consumer Crypto 应用的新形态。
 
-> ⚠️ **关于在线演示**: GitHub 仓库 Website 设置的访问地址 prediction-market-dapp.netlify.app 仅为 **纯前端 UI 演示**，由于时间仓促，连接智能合约与后端服务的功能并未在线上联调。如需体验完整交互功能，请参考下方的 [快速开始](#-快速开始) 在本地运行完整版，本地版本包含了 **前后端+智能合约测试的完整交互版本**。
+> ⚠️ **关于在线演示**: GitHub 仓库 Website 设置的访问地址 prediction-market-dapp.netlify.app 仅为 **部分纯前端 UI 演示**，由于时间仓促，连接智能合约与后端服务的功能并未在线上联调。如需体验完整交互功能，请参考下方的 [快速开始](#-快速开始) 在本地运行完整版，本地版本包含了 **前后端+智能合约测试的完整交互版本**。
 
 ## 🎥 演示视频
 
@@ -51,7 +51,8 @@
 ### 前置要求
 - [Node.js](https://nodejs.org/) (推荐 v20 LTS 或更高版本)
 - [pnpm](https://pnpm.io/) (包管理器)
-- [Rust & Anchor](https://www.anchor-lang.com/docs/installation) (用于合约开发)
+- [Rust & Anchor](https://www.anchor-lang.com/docs/installation) (用于合约开发与部署)
+- [Solana CLI](https://docs.solanalabs.com/cli/install) (用于链上交互)
 - 一个 Solana 钱包 (如 Phantom)
 
 ### 1. 克隆项目
@@ -60,24 +61,47 @@ git clone https://github.com/your-repo/web3-awesome-solana-market.git
 cd web3-awesome-solana-market
 ```
 
-### 2. 安装依赖
+### 2. 智能合约部署 (Contract)
+
+本项目包含完整的 Solana 智能合约 (`soldora`)。在运行前端之前，建议先在本地或 Devnet 部署合约。
+
 ```bash
+# 进入合约目录
+cd contract
+
+# 安装依赖
+yarn install
+
+# 构建合约
+anchor build
+
+# 运行测试 (可选)
+anchor test
+
+# 部署到 Devnet (确保已配置 solana config set --url devnet)
+anchor deploy
+```
+
+> 💡 **提示**: 部署成功后，请将生成的 Program ID 更新到 `Anchor.toml` 和前端配置文件 `src/lib/soldora-idl.ts` 或环境变量中。
+
+### 3. 前端启动 (Frontend)
+
+回到项目根目录，启动前端应用。
+
+```bash
+# 回到根目录
+cd ..
+
+# 安装依赖
 pnpm install
+
+# 配置环境变量
+# 复制 .env.example 到 .env.local 并填入 Supabase 配置
+cp .env.example .env.local
 ```
 
-### 3. 配置环境变量
-复制 `.env.example` (如果不存在则手动创建) 到 `.env.local` 并填入必要的配置：
-
 ```bash
-# .env.local
-
-# Supabase 配置 (必填)
-NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
-```
-
-### 4. 启动开发服务器
-```bash
+# 启动开发服务器
 pnpm dev
 ```
 
@@ -110,16 +134,39 @@ pnpm dev
 
 ## 🗺️ 路线图 (Roadmap)
 
-- [x] **Phase 1: 原型验证**
-    - [x] 基础市场列表与详情页
-    - [x] 3D 场景搭建与漫游
-    - [x] Solana 钱包连接与模拟下注
-- [x] **Phase 2: 智能合约集成**
-    - [x] 集成 Solana Program (Anchor) 实现链上资金托管
-    - [x] 预言机 (Oracle) 接入 (如 Pyth/Switchboard) 自动结算
-- [x] **Phase 3: 社交与生态**
-    - [x] 完善排行榜与 NFT 勋章系统
-    - [x] 推出“预测挖矿”激励机制
+### ✅ Phase 1: 核心功能与 MVP (已完成)
+- **沉浸式交互**: 
+  - [x] 搭建 Cyberpunk 风格 3D 大厅与市场场景 (R3F)
+  - [x] 实现 2D/3D 视图一键无缝切换
+- **智能合约 (Soldora)**:
+  - [x] 基于 Anchor 构建预测市场核心合约
+  - [x] 实现 Create Event (管理员), Bet (用户), Resolve (结算), Redeem (兑奖)
+  - [x] 2% 手续费 Treasury 机制
+- **基础业务**:
+  - [x] Solana 钱包连接 (Wallet Adapter)
+  - [x] 市场列表与详情页展示
+  - [x] 实时评论系统 (Supabase)
+  - [x] 个人中心与下注记录
+
+### 🚧 Phase 2: 协议增强与去中心化 (进行中)
+- **多币种支持**: 
+  - [ ] 支持 USDC/USDT 等 SPL Token 下注 (目前仅支持 SOL)
+- **去中心化治理 (DAO)**:
+  - [ ] 引入预言机 (Pyth/Chainlink) 实现自动化结果喂价，减少管理员干预
+  - [ ] 争议解决机制 (Dispute Resolution): 社区投票裁决争议结果
+- **流动性增强**:
+  - [ ] 引入 AMM (自动做市商) 机制，支持随时买卖头寸 (目前为持有到期)
+
+### 🔮 Phase 3: 社交化与生态扩展 (规划中)
+- **SocialFi 融合**:
+  - [ ] **预测挖矿**: 下注即挖矿，根据交易量奖励平台代币
+  - [ ] **跟单系统**: 允许用户关注“预测大神”并一键跟单
+  - [ ] **NFT 勋章**: 根据胜率和参与度发放动态 NFT 勋章
+- **移动端适配**:
+  - [ ] 推出 PWA 版本或 React Native 移动端 App
+  - [ ] 优化移动端 3D 性能与触摸交互
+- **AI 辅助**:
+  - [ ] 集成 AI 分析师，基于历史数据提供赛事预测参考
 
 ## 📄 许可证
 
