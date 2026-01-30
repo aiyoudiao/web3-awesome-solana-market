@@ -1,7 +1,8 @@
 import { useRef, useState, useMemo, useEffect, MutableRefObject } from 'react';
 import { useFrame } from '@react-three/fiber';
-import { Vector3, CatmullRomCurve3, AudioListener, Audio, AudioLoader } from 'three';
+import { Vector3, CatmullRomCurve3 } from 'three';
 import { Line } from '@react-three/drei';
+import { audioManager } from '@/lib/audio/AudioManager';
 
 interface LightningArcProps {
   start: Vector3;
@@ -16,7 +17,8 @@ interface LightningArcProps {
  */
 const LightningArc = ({ start, end, color, width, opacity }: LightningArcProps) => {
   const points = useMemo(() => {
-    const segments = 8;
+    // 性能优化：减少细分段数
+    const segments = 4; // 原为 8
     const pts = [start];
     const direction = end.clone().sub(start);
     const length = direction.length();
@@ -24,18 +26,17 @@ const LightningArc = ({ start, end, color, width, opacity }: LightningArcProps) 
     for (let i = 1; i < segments; i++) {
       const t = i / segments;
       const point = start.clone().lerp(end, t);
-      // 更加狂暴的随机偏移
-      const offsetAmount = length * 0.3; 
-      point.add(new Vector3(
-        (Math.random() - 0.5) * offsetAmount,
-        (Math.random() - 0.5) * offsetAmount,
-        (Math.random() - 0.5) * offsetAmount
-      ));
+      // 减少随机计算量
+      const offsetAmount = length * 0.2; 
+      point.x += (Math.random() - 0.5) * offsetAmount;
+      point.y += (Math.random() - 0.5) * offsetAmount;
+      point.z += (Math.random() - 0.5) * offsetAmount;
       pts.push(point);
     }
     pts.push(end);
-    return new CatmullRomCurve3(pts).getPoints(20);
-  }, [start, end]); // 每次 start/end 变化都会重新生成形状，这对于跟随小车来说可能太频繁，需要优化
+    // 降低曲线平滑采样数
+    return new CatmullRomCurve3(pts).getPoints(8); // 原为 20
+  }, [start, end]);
 
   return (
     <Line
@@ -64,40 +65,20 @@ export const CarLightningSystem = ({ speedRef, active }: CarLightningSystemProps
   const nextId = useRef(0);
   const timer = useRef(0);
   
-  // 音频相关
-  const soundRef = useRef<Audio | null>(null);
-  const listenerRef = useRef<AudioListener | null>(null);
-
-  // 初始化音频
+  // 初始化音频管理器
   useEffect(() => {
-    // 这里我们使用合成声音而不是加载文件，以保证无需外部依赖
-    // 实际项目中可以替换为 AudioLoader 加载真实素材
-    if (typeof window !== 'undefined') {
-        const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
-        if (!AudioContext) return;
-        
-        const ctx = new AudioContext();
-        const gain = ctx.createGain();
-        gain.connect(ctx.destination);
-        
-        // 简单的白噪声生成器
-        const bufferSize = ctx.sampleRate * 2.0;
-        const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-        const data = buffer.getChannelData(0);
-        for (let i = 0; i < bufferSize; i++) {
-            data[i] = Math.random() * 2 - 1;
-        }
-
-        // 存储上下文供后续播放使用
-        (window as any)._carLightningCtx = { ctx, buffer, gain };
-    }
+    // 确保音频上下文已创建
+    // 注意：真正的初始化通常需要用户交互，这里假设在 SceneView 入口已处理或稍后处理
+    // audioManager.init(); // 可以在这里尝试 init，但最好是在顶层
   }, []);
 
   const playZapSound = (intensity: number) => {
-      const audioSys = (window as any)._carLightningCtx;
-      if (!audioSys || audioSys.ctx.state === 'suspended') return;
+      const ctx = audioManager.getContext();
+      if (!ctx || ctx.state === 'suspended') return;
       
-      const { ctx, buffer, gain } = audioSys;
+      const buffer = audioManager.getBuffer('noise');
+      if (!buffer) return;
+
       const src = ctx.createBufferSource();
       src.buffer = buffer;
       
@@ -110,7 +91,7 @@ export const CarLightningSystem = ({ speedRef, active }: CarLightningSystemProps
       localGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.1 + Math.random() * 0.1);
       
       src.connect(localGain);
-      localGain.connect(gain);
+      localGain.connect(audioManager.getMasterGain()!); // Connect to master instead of destination
       
       src.start();
   };

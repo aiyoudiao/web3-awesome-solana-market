@@ -11,61 +11,63 @@ export const CyberpunkEnvironment = memo(() => {
       {/* 城市夜景光照预设 - 由于网络原因加载失败，暂时注释掉 */}
       {/* <Environment preset="city" blur={0.8} /> */}
       
-      {/* 基础环境光 - 增强亮度以照亮网格 */}
-      <ambientLight intensity={0.8} color="#4c1d95" />
+      {/* 基础环境光 - 大幅增强亮度，确保初始化时不黑屏 */}
+      <ambientLight intensity={2.0} color="#6d28d9" />
       
-      {/* 强烈的霓虹方向光 */}
+      {/* 强烈的霓虹方向光 - 恢复高强度和阴影 */}
       <directionalLight 
-        position={[10, 20, 10]} 
-        intensity={2.5} 
+        position={[50, 100, 50]} 
+        intensity={3.0} 
         color="#9945FF" 
         castShadow 
       />
       
       {/* 顶部补光，确保网格清晰 */}
       <directionalLight 
-        position={[0, 50, 0]} 
-        intensity={1.5} 
+        position={[0, 100, 0]} 
+        intensity={2.0} 
         color="#ffffff" 
       />
 
-      {/* 辅助蓝光 */}
+      {/* 辅助蓝光 - 恢复大范围覆盖 */}
       <pointLight 
-        position={[-10, 5, -10]} 
-        intensity={2} 
+        position={[-50, 20, -50]} 
+        intensity={3} 
         color="#14F195" 
-        distance={50}
+        distance={400} 
       />
       
-      {/* 深色迷雾，营造深邃感 */}
-      <fog attach="fog" args={['#1B1B1F', 10, 60]} />
+      {/* 深色迷雾，营造深邃感 - 大幅增加可视范围 */}
+      <fog attach="fog" args={['#050505', 100, 500]} />
 
-      {/* 动态星空 */}
-      <Stars radius={100} depth={50} count={5000} factor={4} saturation={0} fade speed={1} />
+      {/* 动态星空 - 恢复高数量 */}
+      <Stars radius={400} depth={100} count={8000} factor={6} saturation={0} fade speed={1} />
 
-      {/* 赛博网格地面 */}
+      {/* 赛博网格地面 - 缩减范围 */}
       <Grid 
         position={[0, -0.01, 0]}
-        args={[100, 100]} 
-        cellSize={1} 
-        cellThickness={0.5} 
+        args={[300, 300]} 
+        cellSize={4} 
+        cellThickness={1.0} 
         cellColor="#9945FF" 
-        sectionSize={5} 
+        sectionSize={20} 
         sectionThickness={1.5} 
         sectionColor="#14F195" 
-        fadeDistance={50} 
+        fadeDistance={150} 
         infiniteGrid 
       />
       
-      {/* 反射地面 */}
+      {/* 反射地面 - 缩减物理平面 */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.02, 0]} receiveShadow>
-        <planeGeometry args={[100, 100]} />
+        <planeGeometry args={[1000, 1000]} />
         <meshStandardMaterial 
-          color="#1B1B1F" 
-          metalness={0.9}
-          roughness={0.1}
+          color="#0a0a0a" 
+          emissive="#1a1a2e"
+          emissiveIntensity={0.2}
+          metalness={0.8}
+          roughness={0.2}
           transparent
-          opacity={0.8}
+          opacity={0.9}
         />
       </mesh>
     </>

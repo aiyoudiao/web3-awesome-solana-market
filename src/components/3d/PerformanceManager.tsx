@@ -45,8 +45,8 @@ export const PerformanceManager = () => {
         </PerformanceMonitor>
       )}
 
-      {/* 开发环境下显示 Stats，或者可以通过某种方式开启 */}
-      {process.env.NODE_ENV === 'development' && <Stats className="!left-auto !right-0 !top-16" />}
+      {/* 始终显示 Stats 用于调试，位置调整到左侧中间，避免遮挡 */}
+      <Stats className="!left-8 !top-48 !right-auto" />
     </>
   );
 };

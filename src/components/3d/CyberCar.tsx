@@ -3,12 +3,17 @@ import { useFrame } from '@react-three/fiber';
 import { Mesh, Vector3, Group, MathUtils } from 'three';
 import { Trail, Html } from '@react-three/drei';
 import { CarLightningSystem } from './CarLightningSystem';
+import { audioManager } from '@/lib/audio/AudioManager';
 
 interface CyberCarProps {
   onPositionChange?: (position: { x: number; z: number }) => void;
   positionRef?: React.MutableRefObject<Vector3>;
   // 接收外部输入，用于虚拟摇杆
   inputRef?: React.MutableRefObject<{ x: number; y: number }>;
+  // 暴露朝向，用于第一人称相机
+  headingRef?: React.MutableRefObject<number>;
+  // 暴露速度，用于仪表盘
+  speedRef?: React.MutableRefObject<number>;
 }
 
 /**
@@ -17,17 +22,20 @@ interface CyberCarProps {
  * 替代原有的 Avatar 球体，提供真实的赛车驾驶体验。
  * 包含物理模拟（漂移、惯性）、车轮动画和粒子特效。
  */
-export const CyberCar = memo(({ onPositionChange, positionRef, inputRef }: CyberCarProps) => {
+export const CyberCar = memo(({ onPositionChange, positionRef, inputRef, headingRef, speedRef: externalSpeedRef }: CyberCarProps) => {
   const groupRef = useRef<Group>(null);
   const chassisRef = useRef<Group>(null);
   const wheelFLRef = useRef<Mesh>(null); // Front Left
   const wheelFRRef = useRef<Mesh>(null); // Front Right
   const wheelBLRef = useRef<Mesh>(null); // Back Left
   const wheelBRRef = useRef<Mesh>(null); // Back Right
-  const engineAudioRef = useRef<HTMLAudioElement | null>(null);
+  const engineAudioRef = useRef<{ osc: OscillatorNode; gain: GainNode } | null>(null);
 
   // 物理状态 (使用 Ref 避免重渲染)
-  const speed = useRef(0);
+  // 如果外部传入了 speedRef，则使用外部的，否则使用内部的
+  const internalSpeedRef = useRef(0);
+  const speed = externalSpeedRef || internalSpeedRef;
+  
   const steering = useRef(0);
   const heading = useRef(0);
   const position = useRef(new Vector3(0, 0.5, 8));
@@ -47,23 +55,22 @@ export const CyberCar = memo(({ onPositionChange, positionRef, inputRef }: Cyber
 
   // 音效初始化
   useEffect(() => {
-    // 简单的引擎音效模拟 (使用 Web Audio API)
-    const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
-    if (!AudioContext) return;
+    // 简单的引擎音效模拟 (使用 AudioManager)
+    const ctx = audioManager.getContext();
+    if (!ctx) return;
     
     try {
-      const ctx = new AudioContext();
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       
       osc.type = 'triangle'; // 三角波更接近柔和的引擎声
       osc.frequency.value = 60; // 初始低频
       osc.connect(gain);
-      gain.connect(ctx.destination);
+      gain.connect(audioManager.getMasterGain()!);
       gain.gain.value = 0; // 初始静音，直到用户移动
       
       osc.start();
-      engineAudioRef.current = { ctx, osc, gain } as any;
+      engineAudioRef.current = { osc, gain };
       console.log('[Audio] Engine sound initialized');
     } catch (e) {
       console.error("[Audio] Engine init failed:", e);
@@ -72,9 +79,10 @@ export const CyberCar = memo(({ onPositionChange, positionRef, inputRef }: Cyber
     return () => {
       if (engineAudioRef.current) {
         try {
-          const { ctx, osc } = engineAudioRef.current as any;
-          osc.stop();
-          ctx.close();
+          const { osc, gain } = engineAudioRef.current;
+          // 平滑停止
+          gain.gain.setTargetAtTime(0, ctx.currentTime, 0.1);
+          osc.stop(ctx.currentTime + 0.2);
         } catch (e) {
            // ignore
         }
@@ -133,21 +141,21 @@ export const CyberCar = memo(({ onPositionChange, positionRef, inputRef }: Cyber
 
     // 更新引擎音效
     if (engineAudioRef.current) {
-      const { osc, gain, ctx } = engineAudioRef.current as any;
-      if (ctx.state === 'suspended') {
-         ctx.resume();
-      }
+      const { osc, gain } = engineAudioRef.current;
+      const ctx = audioManager.getContext();
       
-      const absSpeed = Math.abs(speed.current);
-      
-      // 降低基础频率，减少刺耳感
-      const targetFreq = 60 + absSpeed * 240;
-      osc.frequency.setTargetAtTime(targetFreq, ctx.currentTime, 0.1);
-      
-      if (osc.type !== 'triangle') osc.type = 'triangle';
+      if (ctx) {
+          const absSpeed = Math.abs(speed.current);
+          
+          // 降低基础频率，减少刺耳感
+          const targetFreq = 60 + absSpeed * 240;
+          osc.frequency.setTargetAtTime(targetFreq, ctx.currentTime, 0.1);
+          
+          if (osc.type !== 'triangle') osc.type = 'triangle';
 
-      const targetVol = absSpeed > 0.01 ? 0.05 : 0.01;
-      gain.gain.setTargetAtTime(targetVol, ctx.currentTime, 0.2);
+          const targetVol = absSpeed > 0.01 ? 0.05 : 0; // 稍微降低音量
+          gain.gain.setTargetAtTime(targetVol, ctx.currentTime, 0.2);
+      }
     }
 
     // 2. 物理模拟 (速度与转向平滑)
@@ -181,11 +189,16 @@ export const CyberCar = memo(({ onPositionChange, positionRef, inputRef }: Cyber
     const newX = position.current.x + velocityX;
     const newZ = position.current.z + velocityZ;
     
-    position.current.x = Math.max(-40, Math.min(40, newX));
-    position.current.z = Math.max(-40, Math.min(40, newZ));
+    // 扩大边界限制，从 ±400 缩小到 ±200，匹配新的地图尺寸
+    position.current.x = Math.max(-200, Math.min(200, newX));
+    position.current.z = Math.max(-200, Math.min(200, newZ));
 
     // 4. 应用变换到模型
     if (groupRef.current) {
+      // 优化：仅当位置或旋转发生显著变化时才更新 matrixWorld
+      // Three.js 默认每帧更新，但我们可以通过 matrixAutoUpdate=false 手动控制
+      // 但对于主角，每帧更新是必须的。
+      
       groupRef.current.position.set(position.current.x, position.current.y, position.current.z);
       // 这里的 rotation 是车身的实际朝向
       groupRef.current.rotation.y = heading.current;
@@ -218,10 +231,17 @@ export const CyberCar = memo(({ onPositionChange, positionRef, inputRef }: Cyber
     }
 
     // 6. 同步外部状态
+    // 优化：与 CameraFollower 同步
+    // CameraFollower 现在有自己的 lerp 逻辑，这里只需传递准确的物理位置
+    // 无需手动插值，避免双重平滑导致的迟滞或振荡
     if (positionRef) {
-      // 相机稍微滞后一点，或者直接跟随
       positionRef.current.copy(position.current);
     }
+    if (headingRef) {
+      headingRef.current = heading.current;
+    }
+    // 限制回调频率，例如每 100ms 更新一次 UI，或仅在停止时更新
+    // 这里保持每帧回调给 MiniMap，因为 MiniMap 已经做了 30fps 节流
     if (onPositionChange) {
       onPositionChange({ x: position.current.x, z: position.current.z });
     }
