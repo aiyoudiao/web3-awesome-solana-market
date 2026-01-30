@@ -1,7 +1,7 @@
 import { useRef, useMemo, useState, useLayoutEffect, memo } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Instances, Instance } from '@react-three/drei';
-import { InstancedMesh, Object3D, Vector3 } from 'three';
+import { InstancedMesh, Object3D, Vector3, Group } from 'three';
 import { Market } from '@/lib/api';
 import { MarketGeometries, MarketMaterials } from './MarketResources';
 
@@ -13,8 +13,19 @@ interface MarketInstancedMeshProps {
   hoveredId: string | null;
 }
 
+interface MarketInstanceProps {
+    id: string;
+    initialPosition: Vector3;
+    phase: number;
+    market: Market;
+    onSelect: (id: string) => void;
+    onHover: (market: Market | null, position: Vector3 | null) => void;
+    isHovered: boolean;
+}
+
 // 单个实例组件 - 使用 memo 防止非相关项重渲染
-const MarketInstance = memo(({ id, initialPosition, phase, market, onSelect, onHover, isHovered }: any) => {
+const MarketInstance = memo(({ id, initialPosition, phase, market, onSelect, onHover, isHovered }: MarketInstanceProps) => {
+    // Instance ref is a proxy to the internal Object3D-like structure
     const ref = useRef<any>(null);
     const [hover, setHover] = useState(false);
 
@@ -32,7 +43,8 @@ const MarketInstance = memo(({ id, initialPosition, phase, market, onSelect, onH
             
             // 悬停缩放
             const targetScale = (hover || isHovered) ? 1.5 : 1.0;
-            ref.current.scale.lerp({ x: targetScale, y: targetScale, z: targetScale } as any, 0.1);
+            const scaleVec = new Vector3(targetScale, targetScale, targetScale);
+            ref.current.scale.lerp(scaleVec, 0.1);
             
             // 旋转
             ref.current.rotation.y += 0.01;

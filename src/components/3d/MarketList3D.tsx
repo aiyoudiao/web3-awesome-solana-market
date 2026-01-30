@@ -10,6 +10,7 @@ import { Html, Float } from '@react-three/drei';
 import { useMarketListViewModel } from '@/hooks/view-models/useMarketListViewModel';
 import { NavigationArrow } from './NavigationArrow';
 import { CyberpunkLoader } from './CyberpunkLoader';
+import { Market } from '@/lib/api';
 
 interface MarketList3DProps {
   inputRef?: React.MutableRefObject<{ x: number; y: number }>;
@@ -132,10 +133,10 @@ export const MarketList3D = ({ inputRef, speedRef, cameraMode = 'follow' }: Mark
   }, [markets, focusedIndex, handleMarketSelect]);
 
   // State for global tooltip
-  const [hoveredMarket, setHoveredMarket] = useState<{ market: any, position: Vector3 } | null>(null);
+  const [hoveredMarket, setHoveredMarket] = useState<{ market: Market, position: Vector3 } | null>(null);
 
   // 优化：使用 useCallback 避免每次渲染都创建新函数，导致子组件 MarketInstancedMesh 重渲染
-  const handleHover = useCallback((m: any, p: Vector3 | null) => {
+  const handleHover = useCallback((m: Market | null, p: Vector3 | null) => {
       setHoveredMarket(prev => {
           // 只有当 ID 改变或者从 null 变为有值（或反之）时才更新状态
           if (!m && !prev) return prev;

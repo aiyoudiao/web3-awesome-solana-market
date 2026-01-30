@@ -55,13 +55,21 @@ interface CarLightningSystemProps {
   active: boolean; // 开关
 }
 
+interface Arc {
+  id: number;
+  start: Vector3;
+  end: Vector3;
+  color: string;
+  life: number;
+}
+
 /**
  * 赛车雷电特效系统
  * @description
  * 附着在车身上的动态闪电，随速度增强，包含实时音效。
  */
 export const CarLightningSystem = ({ speedRef, active }: CarLightningSystemProps) => {
-  const [arcs, setArcs] = useState<{ id: number; start: Vector3; end: Vector3; color: string; life: number }[]>([]);
+  const [arcs, setArcs] = useState<Arc[]>([]);
   const nextId = useRef(0);
   const timer = useRef(0);
   
@@ -116,7 +124,7 @@ export const CarLightningSystem = ({ speedRef, active }: CarLightningSystemProps
       
       // 生成 1-3 条电弧
       const count = Math.floor(1 + Math.random() * 2);
-      const newArcs = [];
+      const newArcs: Arc[] = [];
       
       for (let i = 0; i < count; i++) {
         // 在车身周围随机生成

@@ -53,6 +53,16 @@ export interface LeaderboardUser {
   badges: string[];
 }
 
+export interface GenerateChallengeResponse {
+  id: string;
+  title: string;
+  description: string;
+  creatorWallet: string;
+  endTime: number;
+  status: string;
+  createdAt: string;
+}
+
 export const api = {
   // 市场相关接口
   getTrendingMarkets: async (): Promise<Market[]> => {

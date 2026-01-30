@@ -2,7 +2,7 @@ import { useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useMutation } from "@tanstack/react-query";
-import { api } from "@/lib/api";
+import { api, GenerateChallengeResponse } from "@/lib/api";
 
 export interface CreateMarketFormData {
   title: string;
@@ -34,13 +34,13 @@ export const useCreateMarketViewModel = () => {
         endTime: data.endTime,
       });
     },
-    onSuccess: (data: any) => {
+    onSuccess: (data: GenerateChallengeResponse) => {
       alert(
         `预测事件已提交审核！\n请等待管理员审核通过后上链。\nEvent ID: ${data.id}`,
       );
       router.push("/profile");
     },
-    onError: (err: any) => {
+    onError: (err: Error) => {
       console.error(err);
       alert("创建失败: " + err.message);
     },
