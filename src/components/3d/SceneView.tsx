@@ -14,6 +14,8 @@ import { useMarketListViewModel } from '@/hooks/view-models/useMarketListViewMod
 import { useState, useEffect } from 'react';
 import { SolanaLightning } from './SolanaLightning';
 import { EffectComposer, Bloom } from '@react-three/postprocessing';
+import { PerformanceManager } from './PerformanceManager';
+import { useQualityStore, QualityLevel } from '@/stores/useQualityStore';
 
 /**
  * WebGL 上下文监听组件
@@ -54,6 +56,44 @@ const ContextMonitor = ({
 };
 
 /**
+ * 质量切换器组件
+ */
+const QualitySwitcher = () => {
+  // Use selector to avoid re-rendering entire component on FPS updates
+  // But for now, we just destructure safely
+  const level = useQualityStore(s => s.level);
+  const setQuality = useQualityStore(s => s.setQuality);
+  const fps = useQualityStore(s => s.fps);
+  
+  const labels: Record<QualityLevel, string> = {
+    low: '低',
+    medium: '中',
+    high: '高',
+    ultra: '超高'
+  };
+
+  return (
+    <div className="absolute bottom-8 right-8 z-[260] flex flex-col gap-2 items-end pointer-events-auto">
+      <div className="text-xs font-mono text-white/50 mb-1">FPS: {typeof fps === 'number' ? fps : 0}</div>
+      <div className="flex gap-1 bg-black/40 backdrop-blur-md p-1 rounded-lg border border-white/10">
+        {(['low', 'medium', 'high', 'ultra'] as QualityLevel[]).map((q) => (
+            <button
+                key={q}
+                onClick={() => setQuality(q)}
+                className={`
+                    px-3 py-1 text-[10px] uppercase font-bold rounded transition-colors
+                    ${level === q ? 'bg-[#9945FF] text-white' : 'text-white/50 hover:text-white hover:bg-white/10'}
+                `}
+            >
+                {labels[q]}
+            </button>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+/**
  * 3D 场景视图组件
  * @author aiyoudiao
  * @date 2026-01-23
@@ -62,6 +102,7 @@ const ContextMonitor = ({
  */
 export const SceneView = () => {
   const { viewMode, playerPos, setPlayerPos } = useStore();
+  const { dpr, shadows, bloom, bloomIntensity } = useQualityStore();
   const pathname = usePathname();
   const [canvasKey, setCanvasKey] = useState(0);
   const [isContextLost, setIsContextLost] = useState(false);
@@ -126,14 +167,14 @@ export const SceneView = () => {
     >
       <Canvas 
         key={canvasKey}
-        shadows={false}
-        dpr={[1, 1]} 
+        shadows={shadows}
+        dpr={[1, dpr]} 
         gl={{ 
           antialias: true, 
-          alpha: false,
+          alpha: false, 
           stencil: false,
           depth: true,
-          powerPreference: "default",
+          powerPreference: "high-performance",
           failIfMajorPerformanceCaveat: false,
           preserveDrawingBuffer: false
         }}
@@ -150,18 +191,22 @@ export const SceneView = () => {
             setIsContextLost(false);
           }}
         />
+        
+        <PerformanceManager />
 
         <color attach="background" args={['#1B1B1F']} />
         
         {/* PostProcessing Effects */}
-        <EffectComposer disableNormalPass>
-            <Bloom 
-                luminanceThreshold={1.5} // 只让非常亮的东西发光 (emissiveIntensity > 1.5)
-                intensity={1.5} 
-                radius={0.8}
-                mipmapBlur // 高质量平滑
-            />
-        </EffectComposer>
+        {bloom && (
+            <EffectComposer enableNormalPass={false}>
+                <Bloom 
+                    luminanceThreshold={1.5} 
+                    intensity={bloomIntensity} 
+                    radius={0.8}
+                    mipmapBlur 
+                />
+            </EffectComposer>
+        )}
 
         {/* 核心环境 - 如果这里崩溃，尝试注释掉它 */}
         <CyberpunkEnvironment />
@@ -193,6 +238,8 @@ export const SceneView = () => {
         />
       </Canvas>
       
+      <QualitySwitcher />
+
       {/* MiniMap Overlay - Always visible in 3D mode */}
       <MiniMap 
         markets={miniMapMarkets} 

@@ -2,6 +2,7 @@ import { useRef, memo, useState, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Mesh, Vector3, Group, MathUtils } from 'three';
 import { Trail, Html } from '@react-three/drei';
+import { CarLightningSystem } from './CarLightningSystem';
 
 interface CyberCarProps {
   onPositionChange?: (position: { x: number; z: number }) => void;
@@ -234,31 +235,30 @@ export const CyberCar = memo(({ onPositionChange, positionRef }: CyberCarProps) 
 
   return (
     <group ref={groupRef}>
+      {/* 挂载雷电特效系统 (传递速度 Ref) */}
+      <CarLightningSystem speedRef={speed} active={true} />
+
       {/* 尾气拖尾效果 */}
-      {Math.abs(speed.current) > 0.2 && (
-        <Trail
-            width={1.2}
-            length={8}
-            color={colors.neon} // 紫色拖尾
-            attenuation={(t) => t * t}
-        >
-            <mesh position={[0.5, 0.2, -1.2]} visible={false}>
-                <boxGeometry args={[0.1, 0.1, 0.1]} />
-            </mesh>
-        </Trail>
-      )}
-      {Math.abs(speed.current) > 0.2 && (
-        <Trail
-            width={1.2}
-            length={8}
-            color={colors.neon2} // 绿色拖尾
-            attenuation={(t) => t * t}
-        >
-            <mesh position={[-0.5, 0.2, -1.2]} visible={false}>
-                <boxGeometry args={[0.1, 0.1, 0.1]} />
-            </mesh>
-        </Trail>
-      )}
+      <Trail
+          width={1.2}
+          length={8}
+          color={colors.neon} // 紫色拖尾
+          attenuation={(t) => t * t}
+      >
+          <mesh position={[0.5, 0.2, -1.2]} visible={false}>
+              <boxGeometry args={[0.1, 0.1, 0.1]} />
+          </mesh>
+      </Trail>
+      <Trail
+          width={1.2}
+          length={8}
+          color={colors.neon2} // 绿色拖尾
+          attenuation={(t) => t * t}
+      >
+          <mesh position={[-0.5, 0.2, -1.2]} visible={false}>
+              <boxGeometry args={[0.1, 0.1, 0.1]} />
+          </mesh>
+      </Trail>
 
       {/* 车身组 (包含侧倾动画) */}
       <group ref={chassisRef}>
