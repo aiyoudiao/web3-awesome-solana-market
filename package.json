@@ -51,6 +51,7 @@
   },
   "devDependencies": {
     "@types/html2canvas": "^1.0.0",
+    "@types/jest": "^30.0.0",
     "@types/node": "^25.0.10",
     "@types/qrcode.react": "^3.0.0",
     "@types/react": "^19.2.9",
