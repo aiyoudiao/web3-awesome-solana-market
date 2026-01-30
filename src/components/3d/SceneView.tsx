@@ -11,7 +11,7 @@ import { CreateMarket3D } from './CreateMarket3D';
 import { Challenge3D } from './Challenge3D';
 import { MiniMap } from './MiniMap';
 import { useMarketListViewModel } from '@/hooks/view-models/useMarketListViewModel';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { SolanaLightning } from './SolanaLightning';
 import { EffectComposer, Bloom } from '@react-three/postprocessing';
 import { PerformanceManager } from './PerformanceManager';
@@ -93,6 +93,8 @@ const QualitySwitcher = () => {
   );
 };
 
+import { VirtualJoystick } from './VirtualJoystick';
+
 /**
  * 3D 场景视图组件
  * @author aiyoudiao
@@ -106,22 +108,15 @@ export const SceneView = () => {
   const pathname = usePathname();
   const [canvasKey, setCanvasKey] = useState(0);
   const [isContextLost, setIsContextLost] = useState(false);
+  
+  // 虚拟摇杆状态
+  const joystickRef = useRef({ x: 0, y: 0 });
 
-  // 获取市场数据用于 MiniMap
+  // ... (existing market logic)
   const { allMarkets } = useMarketListViewModel();
+  const miniMapMarkets = (allMarkets || []).map(m => ({ id: m.marketId, title: m.title }));
+  const handleMiniMapClick = (x: number, z: number) => { setPlayerPos({ x, z }); };
 
-  // 转换市场数据格式
-  const miniMapMarkets = (allMarkets || []).map(m => ({
-    id: m.marketId,
-    title: m.title
-  }));
-
-  // 处理 MiniMap 点击跳转
-  const handleMiniMapClick = (x: number, z: number) => {
-    setPlayerPos({ x, z });
-  };
-
-  // 监听视图模式变化，重置 Canvas
   useEffect(() => {
     if (viewMode === '3d') {
       setCanvasKey(prev => prev + 1);
@@ -129,11 +124,11 @@ export const SceneView = () => {
     }
   }, [viewMode]);
 
-  // 仅在 3D 模式开启时显示
   if (viewMode !== '3d') return null;
 
   if (isContextLost) {
-    return (
+      // ... (existing error UI)
+      return (
       <div className="fixed inset-0 z-[250] bg-[#1B1B1F] flex items-center justify-center text-white flex-col gap-4">
         <div className="text-xl font-bold text-red-500">WebGL 上下文丢失</div>
         <button 
@@ -153,16 +148,9 @@ export const SceneView = () => {
     <div 
       className="fixed inset-0 z-[250] bg-[#1B1B1F] outline-none" 
       tabIndex={0}
-      onClick={(e) => {
-        // 确保点击时获取焦点，以便接收键盘事件
-        e.currentTarget.focus();
-        window.focus();
-      }}
+      onClick={(e) => { e.currentTarget.focus(); window.focus(); }}
       onKeyDown={(e) => {
-        // 防止按键滚动页面
-        if(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) {
-          e.preventDefault();
-        }
+        if(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault();
       }}
     >
       <Canvas 
@@ -181,40 +169,19 @@ export const SceneView = () => {
         camera={{ position: [0, 15, 25], fov: 55, near: 0.1, far: 1000 }} 
         style={{ touchAction: 'none' }} 
       >
-        <ContextMonitor 
-          onContextLost={() => {
-            console.warn('检测到 WebGL 上下文丢失');
-            setIsContextLost(true);
-          }}
-          onContextRestored={() => {
-            console.log('WebGL 上下文已恢复');
-            setIsContextLost(false);
-          }}
-        />
-        
+        <ContextMonitor onContextLost={() => setIsContextLost(true)} onContextRestored={() => setIsContextLost(false)} />
         <PerformanceManager />
-
         <color attach="background" args={['#1B1B1F']} />
         
-        {/* PostProcessing Effects */}
         {bloom && (
             <EffectComposer enableNormalPass={false}>
-                <Bloom 
-                    luminanceThreshold={1.5} 
-                    intensity={bloomIntensity} 
-                    radius={0.8}
-                    mipmapBlur 
-                />
+                <Bloom luminanceThreshold={1.5} intensity={bloomIntensity} radius={0.8} mipmapBlur />
             </EffectComposer>
         )}
 
-        {/* 核心环境 - 如果这里崩溃，尝试注释掉它 */}
         <CyberpunkEnvironment />
-        
-        {/* 闪电特效系统 */}
         <SolanaLightning />
         
-        {/* 根据路由渲染不同的 3D 内容 */}
         {pathname === '/create' ? (
           <CreateMarket3D />
         ) : pathname === '/challenge' ? (
@@ -222,32 +189,20 @@ export const SceneView = () => {
         ) : pathname.startsWith('/market/') ? (
           <MarketDetail3D />
         ) : (
-          <MarketList3D />
+          <MarketList3D inputRef={joystickRef} />
         )}
 
-        <OrbitControls 
-          makeDefault
-          enablePan={true}
-          enableDamping={true}
-          dampingFactor={0.05}
-          screenSpacePanning={false}
-          minPolarAngle={0} 
-          maxPolarAngle={Math.PI / 2.2} 
-          minDistance={5}
-          maxDistance={100} 
-        />
+        <OrbitControls makeDefault enablePan={true} enableDamping={true} dampingFactor={0.05} screenSpacePanning={false} minPolarAngle={0} maxPolarAngle={Math.PI / 2.2} minDistance={5} maxDistance={100} />
       </Canvas>
       
-      <QualitySwitcher />
-
-      {/* MiniMap Overlay - Always visible in 3D mode */}
-      <MiniMap 
-        markets={miniMapMarkets} 
-        playerPos={playerPos} 
-        onMarketClick={handleMiniMapClick}
+      <VirtualJoystick 
+        onMove={(data) => { joystickRef.current = data; }}
+        onEnd={() => { joystickRef.current = { x: 0, y: 0 }; }}
       />
 
-      {/* 操作提示 */}
+      <QualitySwitcher />
+      <MiniMap markets={miniMapMarkets} playerPos={playerPos} onMarketClick={handleMiniMapClick} />
+
       <div className="absolute bottom-8 left-1/2 -translate-x-1/2 pointer-events-none text-white/50 text-xs font-mono bg-black/40 px-4 py-2 rounded-full backdrop-blur-sm border border-white/10">
          点击屏幕激活控制 | WASD 或 方向键移动
       </div>

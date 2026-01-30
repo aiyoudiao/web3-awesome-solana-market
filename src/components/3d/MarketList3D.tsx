@@ -8,11 +8,15 @@ import { CameraFollower } from './CameraFollower';
 import { Html } from '@react-three/drei';
 import { useMarketListViewModel } from '@/hooks/view-models/useMarketListViewModel';
 
+interface MarketList3DProps {
+  inputRef?: React.MutableRefObject<{ x: number; y: number }>;
+}
+
 /**
  * 3D 市场列表组件
  * @description 展示所有市场的环形分布，包含玩家 Avatar
  */
-export const MarketList3D = () => {
+export const MarketList3D = ({ inputRef }: MarketList3DProps) => {
   const { setPlayerPos } = useStore();
   const router = useRouter();
   
@@ -36,7 +40,11 @@ export const MarketList3D = () => {
 
   return (
     <>
-      <CyberCar onPositionChange={setPlayerPos} positionRef={avatarPosRef} />
+      <CyberCar 
+        onPositionChange={setPlayerPos} 
+        positionRef={avatarPosRef} 
+        inputRef={inputRef} 
+      />
       <CameraFollower targetRef={avatarPosRef} />
       
       {markets.map((market, index) => {

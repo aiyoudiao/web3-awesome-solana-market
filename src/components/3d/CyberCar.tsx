@@ -7,6 +7,8 @@ import { CarLightningSystem } from './CarLightningSystem';
 interface CyberCarProps {
   onPositionChange?: (position: { x: number; z: number }) => void;
   positionRef?: React.MutableRefObject<Vector3>;
+  // 接收外部输入，用于虚拟摇杆
+  inputRef?: React.MutableRefObject<{ x: number; y: number }>;
 }
 
 /**
@@ -15,7 +17,7 @@ interface CyberCarProps {
  * 替代原有的 Avatar 球体，提供真实的赛车驾驶体验。
  * 包含物理模拟（漂移、惯性）、车轮动画和粒子特效。
  */
-export const CyberCar = memo(({ onPositionChange, positionRef }: CyberCarProps) => {
+export const CyberCar = memo(({ onPositionChange, positionRef, inputRef }: CyberCarProps) => {
   const groupRef = useRef<Group>(null);
   const chassisRef = useRef<Group>(null);
   const wheelFLRef = useRef<Mesh>(null); // Front Left
@@ -100,12 +102,34 @@ export const CyberCar = memo(({ onPositionChange, positionRef }: CyberCarProps) 
   useFrame((state, delta) => {
     // 1. 处理输入
     let targetSpeed = 0;
+    let targetSteering = 0;
+
+    // 优先读取键盘
     if (keys.current['ArrowUp'] || keys.current['KeyW']) targetSpeed = config.maxSpeed;
     if (keys.current['ArrowDown'] || keys.current['KeyS']) targetSpeed = -config.maxSpeed * 0.5;
 
-    let targetSteering = 0;
     if (keys.current['ArrowLeft'] || keys.current['KeyA']) targetSteering = 1;
     if (keys.current['ArrowRight'] || keys.current['KeyD']) targetSteering = -1;
+
+    // 如果没有键盘输入，尝试读取虚拟摇杆输入
+    if (inputRef && inputRef.current && targetSpeed === 0 && targetSteering === 0) {
+        // 摇杆 Y 轴：向上为负，向下为正（屏幕坐标），所以我们要取反
+        // 但是通常摇杆组件输出是归一化的。
+        // 假设 VirtualJoystick 输出: y < 0 向上, y > 0 向下
+        const joyX = inputRef.current.x;
+        const joyY = inputRef.current.y;
+        
+        // 只有当推力足够大时才响应
+        if (Math.abs(joyY) > 0.1 || Math.abs(joyX) > 0.1) {
+            // Y轴控制速度 (-1 ~ 1) -> (maxSpeed ~ -maxSpeed)
+            targetSpeed = -joyY * config.maxSpeed;
+            
+            // X轴控制转向 (-1 ~ 1) -> (1 ~ -1)
+            // 摇杆向左 (x<0) -> 转向 +1 (左转)
+            // 摇杆向右 (x>0) -> 转向 -1 (右转)
+            targetSteering = -joyX;
+        }
+    }
 
     // 更新引擎音效
     if (engineAudioRef.current) {
