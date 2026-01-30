@@ -108,19 +108,19 @@ export const Navbar3D = () => {
               </div>
             </Link>
 
-            <Link href="/challenge" className="relative">
+            <Link href="/create" className="relative">
               <div className={`
                 px-3 md:px-6 py-2 rounded font-bold text-xs md:text-sm transition-all duration-300 grid grid-flow-col gap-1 md:gap-2 items-center overflow-hidden relative
-                ${isActive('/challenge') 
+                ${isActive('/create') 
                   ? 'text-white shadow-[0_0_20px_rgba(153,69,255,0.2)]' 
                   : 'text-[#D1D5DB] hover:text-white'}
               `}>
-                {isActive('/challenge') && (
+                {isActive('/create') && (
                   <div className="absolute inset-0 bg-gradient-to-r from-[#9945FF]/80 to-[#7C3AED]/80 opacity-90" />
                 )}
                 <span className="relative z-10 grid grid-flow-col gap-1 md:gap-2 items-center">
                   <PlusCircle size={14} className="md:w-4 md:h-4" />
-                  <span className="hidden sm:inline">创建预测</span>
+                  <span className="hidden sm:inline">创建事件</span>
                   <span className="sm:hidden">创建</span>
                 </span>
               </div>

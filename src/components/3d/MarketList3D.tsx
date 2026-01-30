@@ -2,12 +2,11 @@ import { useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useStore } from '@/lib/store';
 import { MarketArtifact } from './MarketArtifact';
-import { Avatar } from './Avatar';
+import { CyberCar } from './CyberCar';
 import { Vector3 } from 'three';
 import { CameraFollower } from './CameraFollower';
-import { useQuery } from '@tanstack/react-query';
-import { api } from '@/lib/api';
 import { Html } from '@react-three/drei';
+import { useMarketListViewModel } from '@/hooks/view-models/useMarketListViewModel';
 
 /**
  * 3D 市场列表组件
@@ -17,11 +16,8 @@ export const MarketList3D = () => {
   const { setPlayerPos } = useStore();
   const router = useRouter();
   
-  // 使用 React Query 获取实时数据
-  const { data: markets, isLoading } = useQuery({
-    queryKey: ['trendingMarkets'],
-    queryFn: api.getTrendingMarkets
-  });
+  // 使用 ViewModel 获取数据 (与 2D 页面一致)
+  const { allMarkets: markets, isLoading } = useMarketListViewModel();
 
   // 用于相机跟随的 Ref (避免频繁重渲染)
   const avatarPosRef = useRef(new Vector3(0, 2, 8));
@@ -40,7 +36,7 @@ export const MarketList3D = () => {
 
   return (
     <>
-      <Avatar onPositionChange={setPlayerPos} positionRef={avatarPosRef} />
+      <CyberCar onPositionChange={setPlayerPos} positionRef={avatarPosRef} />
       <CameraFollower targetRef={avatarPosRef} />
       
       {markets.map((market, index) => {

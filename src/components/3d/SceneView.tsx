@@ -9,7 +9,11 @@ import { MarketList3D } from './MarketList3D';
 import { MarketDetail3D } from './MarketDetail3D';
 import { CreateMarket3D } from './CreateMarket3D';
 import { Challenge3D } from './Challenge3D';
+import { MiniMap } from './MiniMap';
+import { useMarketListViewModel } from '@/hooks/view-models/useMarketListViewModel';
 import { useState, useEffect } from 'react';
+import { SolanaLightning } from './SolanaLightning';
+import { EffectComposer, Bloom } from '@react-three/postprocessing';
 
 /**
  * WebGL 上下文监听组件
@@ -57,10 +61,24 @@ const ContextMonitor = ({
  * 3D 模式的主入口组件。
  */
 export const SceneView = () => {
-  const { viewMode } = useStore();
+  const { viewMode, playerPos, setPlayerPos } = useStore();
   const pathname = usePathname();
   const [canvasKey, setCanvasKey] = useState(0);
   const [isContextLost, setIsContextLost] = useState(false);
+
+  // 获取市场数据用于 MiniMap
+  const { allMarkets } = useMarketListViewModel();
+
+  // 转换市场数据格式
+  const miniMapMarkets = (allMarkets || []).map(m => ({
+    id: m.marketId,
+    title: m.title
+  }));
+
+  // 处理 MiniMap 点击跳转
+  const handleMiniMapClick = (x: number, z: number) => {
+    setPlayerPos({ x, z });
+  };
 
   // 监听视图模式变化，重置 Canvas
   useEffect(() => {
@@ -91,7 +109,21 @@ export const SceneView = () => {
   }
 
   return (
-    <div className="fixed inset-0 z-[250] bg-[#1B1B1F]">
+    <div 
+      className="fixed inset-0 z-[250] bg-[#1B1B1F] outline-none" 
+      tabIndex={0}
+      onClick={(e) => {
+        // 确保点击时获取焦点，以便接收键盘事件
+        e.currentTarget.focus();
+        window.focus();
+      }}
+      onKeyDown={(e) => {
+        // 防止按键滚动页面
+        if(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) {
+          e.preventDefault();
+        }
+      }}
+    >
       <Canvas 
         key={canvasKey}
         shadows={false}
@@ -121,8 +153,21 @@ export const SceneView = () => {
 
         <color attach="background" args={['#1B1B1F']} />
         
+        {/* PostProcessing Effects */}
+        <EffectComposer disableNormalPass>
+            <Bloom 
+                luminanceThreshold={1.5} // 只让非常亮的东西发光 (emissiveIntensity > 1.5)
+                intensity={1.5} 
+                radius={0.8}
+                mipmapBlur // 高质量平滑
+            />
+        </EffectComposer>
+
         {/* 核心环境 - 如果这里崩溃，尝试注释掉它 */}
         <CyberpunkEnvironment />
+        
+        {/* 闪电特效系统 */}
+        <SolanaLightning />
         
         {/* 根据路由渲染不同的 3D 内容 */}
         {pathname === '/create' ? (
@@ -147,6 +192,18 @@ export const SceneView = () => {
           maxDistance={100} 
         />
       </Canvas>
+      
+      {/* MiniMap Overlay - Always visible in 3D mode */}
+      <MiniMap 
+        markets={miniMapMarkets} 
+        playerPos={playerPos} 
+        onMarketClick={handleMiniMapClick}
+      />
+
+      {/* 操作提示 */}
+      <div className="absolute bottom-8 left-1/2 -translate-x-1/2 pointer-events-none text-white/50 text-xs font-mono bg-black/40 px-4 py-2 rounded-full backdrop-blur-sm border border-white/10">
+         点击屏幕激活控制 | WASD 或 方向键移动
+      </div>
     </div>
   );
 };

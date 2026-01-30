@@ -4,8 +4,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Flame, Tv, Search, Filter } from "lucide-react";
 import { Buffer } from 'buffer';
-import { useSoldoraProgram } from "@/hooks/useSoldoraProgram";
-import { useEffect, useMemo, useState } from "react";
+import { useMarketListViewModel } from "@/hooks/view-models/useMarketListViewModel";
 import { LAMPORTS_PER_SOL } from "@solana/web3.js";
 import { clsx } from "clsx";
 
@@ -15,67 +14,14 @@ if (typeof window !== 'undefined') {
 }
 
 export default function MarketsPage() {
-  const { events, fetchState, getParticipants, loading: isLoading } = useSoldoraProgram();
-  const [filter, setFilter] = useState<'all' | 'active' | 'resolved'>('all');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [participantsMap, setParticipantsMap] = useState<Record<string, number>>({});
-
-  useEffect(() => {
-    fetchState();
-  }, [fetchState]);
-
-  useEffect(() => {
-    const fetchAllParticipants = async () => {
-        if (events.length === 0) return;
-        const map: Record<string, number> = {};
-        for (const ev of events) {
-            const count = await getParticipants(ev.account.yesMint, ev.account.noMint);
-            map[ev.publicKey.toString()] = count;
-        }
-        setParticipantsMap(map);
-    };
-    fetchAllParticipants();
-  }, [events, getParticipants]);
-
-  const markets = useMemo(() => {
-    return events.map((event) => {
-        const yesSupply = event.account.yesSupply.toNumber();
-        const noSupply = event.account.noSupply.toNumber();
-        const total = yesSupply + noSupply;
-        
-        let yesOdds = 50;
-        let noOdds = 50;
-        if (total > 0) {
-            yesOdds = Math.round((yesSupply / total) * 100);
-            noOdds = Math.round((noSupply / total) * 100);
-        }
-
-        return {
-            marketId: event.publicKey.toString(),
-            title: event.account.description,
-            category: 'crypto', // Default
-            volume: total, // In Lamports
-            participants: participantsMap[event.publicKey.toString()] || 0,
-            odds: { yes: yesOdds, no: noOdds },
-            resolutionDate: new Date(event.account.deadline.toNumber() * 1000).toISOString(),
-            thumbnail: 'https://images.unsplash.com/photo-1621761191319-c6fb62004040?auto=format&fit=crop&q=80&w=1000', // Random crypto image
-            status: event.account.status
-        };
-    });
-  }, [events, participantsMap]);
-
-  const filteredMarkets = useMemo(() => {
-    return markets.filter(market => {
-        // 状态过滤
-        if (filter === 'active' && !market.status.active) return false;
-        if (filter === 'resolved' && !market.status.resolved) return false; // 假设 resolved 状态是这样判断，如果不是 active 就是 resolved? 参考 test.tsx 是 status.active
-
-        // 搜索过滤
-        if (searchQuery && !market.title.toLowerCase().includes(searchQuery.toLowerCase())) return false;
-
-        return true;
-    });
-  }, [markets, filter, searchQuery]);
+  const { 
+    markets, 
+    isLoading, 
+    filter, 
+    setFilter, 
+    searchQuery, 
+    setSearchQuery 
+  } = useMarketListViewModel();
 
   return (
     <div className="container py-8 space-y-8">
@@ -87,7 +33,7 @@ export default function MarketsPage() {
         </div>
         <Link href="/create">
              <Button size="lg" className="font-bold">
-               创建新事件
+               创建事件
              </Button>
         </Link>
       </div>
@@ -101,69 +47,48 @@ export default function MarketsPage() {
                 placeholder="搜索赛事..." 
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-black/20 border border-white/10 rounded-lg pl-10 pr-4 py-2 focus:outline-none focus:border-primary transition-colors"
+                className="w-full pl-10 pr-4 py-2 rounded-lg bg-transparent border-none focus:ring-0 placeholder:text-muted-foreground"
             />
         </div>
         
-        <div className="flex gap-2 w-full md:w-auto overflow-x-auto pb-2 md:pb-0">
-            <button 
-                onClick={() => setFilter('all')}
-                className={clsx(
-                    "px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors",
-                    filter === 'all' ? "bg-primary text-primary-foreground" : "bg-white/5 hover:bg-white/10"
-                )}
-            >
-                全部
-            </button>
-            <button 
-                onClick={() => setFilter('active')}
-                className={clsx(
-                    "px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors",
-                    filter === 'active' ? "bg-green-600 text-white" : "bg-white/5 hover:bg-white/10"
-                )}
-            >
-                进行中
-            </button>
-            <button 
-                onClick={() => setFilter('resolved')}
-                className={clsx(
-                    "px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors",
-                    filter === 'resolved' ? "bg-gray-600 text-white" : "bg-white/5 hover:bg-white/10"
-                )}
-            >
-                已结束
-            </button>
+        <div className="flex items-center gap-2">
+            <Filter className="w-4 h-4 text-muted-foreground" />
+            <div className="flex bg-black/20 rounded-lg p-1">
+                <button 
+                    onClick={() => setFilter('all')}
+                    className={clsx(
+                        "px-3 py-1 text-sm rounded-md transition-all",
+                        filter === 'all' ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                    )}
+                >
+                    全部
+                </button>
+                <button 
+                    onClick={() => setFilter('active')}
+                    className={clsx(
+                        "px-3 py-1 text-sm rounded-md transition-all",
+                        filter === 'active' ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                    )}
+                >
+                    进行中
+                </button>
+                <button 
+                    onClick={() => setFilter('resolved')}
+                    className={clsx(
+                        "px-3 py-1 text-sm rounded-md transition-all",
+                        filter === 'resolved' ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                    )}
+                >
+                    已结束
+                </button>
+            </div>
         </div>
       </div>
 
       {/* 市场列表 */}
-      <div>
-        {/* 加载状态 */}
-        {isLoading && (
-           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {[1, 2, 3, 4, 5, 6].map((i) => (
-                 <div key={i} className="glass rounded-xl h-64 animate-pulse bg-white/5"></div>
-              ))}
-           </div>
-        )}
-
-        {/* 空状态 */}
-        {!isLoading && filteredMarkets.length === 0 && (
-            <div className="text-center py-20 text-muted-foreground">
-                <Filter className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                <p className="text-lg">暂无符合条件的赛事</p>
-                {filter !== 'all' && (
-                    <Button variant="link" onClick={() => setFilter('all')} className="mt-2">
-                        清除筛选
-                    </Button>
-                )}
-            </div>
-        )}
-        
-        {/* 数据展示 */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredMarkets.map((market) => (
-            <Link key={market.marketId} href={`/market/${market.marketId}`} className="group">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {markets.map((market) => (
+          <Link href={`/market/${market.marketId}`} key={market.marketId}>
               <div className="glass rounded-xl p-0 overflow-hidden hover:border-primary/50 transition-all duration-300 hover:shadow-[0_0_20px_rgba(0,212,255,0.2)] h-full flex flex-col">
                  <div className="h-48 bg-gradient-to-br from-slate-900 to-slate-800 relative p-4 flex items-center justify-between">
                     <img src={market.thumbnail} alt={market.title} className="absolute inset-0 w-full h-full object-cover opacity-40 group-hover:opacity-50 transition-opacity" />
@@ -216,6 +141,5 @@ export default function MarketsPage() {
           ))}
         </div>
       </div>
-    </div>
   );
 }
