@@ -9,7 +9,7 @@ pub const FEE_DENOMINATOR: u64 = 10000;
 // import mods contnent
 use instructions::*;
 
-declare_id!("42MGvXQ8uDAYaoMYezkQw6dDr3RYtWNNKc5JGCB3Jp99"); // 保持不变
+declare_id!("8R7TCzkhdURCAWdwEiqbZAFVnRNkXVCG4XVgHjLGhUNH");
 
 
 #[program]

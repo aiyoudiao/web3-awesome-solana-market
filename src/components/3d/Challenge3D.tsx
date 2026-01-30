@@ -30,7 +30,7 @@ export const Challenge3D = () => {
     setCurrentUrl(window.location.href);
   }, []);
 
-  const finalShareUrl = currentUrl || `http://localhost:3000/market/${marketId}`;
+  const finalShareUrl = currentUrl || `https://prediction-market-dapp.netlify.app/market/${marketId}`;
 
   // 装饰环动画
   useFrame((state) => {

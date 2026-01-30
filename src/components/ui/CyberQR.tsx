@@ -22,7 +22,7 @@ export const CyberQR: React.FC<CyberQRProps> = ({
         height: size,
         type: 'svg',
         shape: 'square',
-        data: "http://localhost:3000/challenge?id=market_101&title=Will%20Bitcoin%20reach%20%24100%2C000%3F%20(MOCK)",
+        data: value,
         image: logo,
         margin: 0,
         qrOptions: {

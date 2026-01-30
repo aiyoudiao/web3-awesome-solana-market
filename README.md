@@ -93,42 +93,105 @@ cd web3-awesome-solana-market
 
 ### 2. 智能合约部署 (Contract)
 
-本项目包含完整的 Solana 智能合约 (`soldora`)。在运行前端之前，建议先在本地环境 (Localnet) 部署合约。
+本项目包含完整的 Solana 智能合约 (`soldora`)。默认配置已调整为连接 **Devnet 测试网**。您也可以选择部署到本地测试链 (Localnet)。
 
-```bash
-# 进入合约目录
-cd contract
+#### 选项 A: 部署到 Devnet (推荐)
 
-# 安装依赖
-yarn install
+如果您希望应用连接到公共测试网络，请执行以下步骤：
 
-# 构建合约
-anchor build
-```
+1. **配置 Solana CLI 为 Devnet**
+   ```bash
+   solana config set --url devnet
+   ```
 
-#### 启动本地测试链
-打开一个新的终端窗口，启动 Solana 本地验证器节点：
-```bash
-solana-test-validator
-```
+2. **准备钱包与 SOL**
+   确保您有生成的钱包密钥对，并领取 Devnet 测试币：
+   ```bash
+   # 如果没有钱包，生成一个新的 (默认路径 ~/.config/solana/id.json)
+   solana-keygen new
 
-#### 部署合约
-回到原来的终端，配置 Solana CLI 使用本地网络并部署：
+   # 领取测试币 (Devnet 限制较多，可能需要多次尝试或使用水龙头网站)
+   solana airdrop 2
+   ```
+   
+   > ⚠️ **空投失败怎么办？**
+   > 如果 CLI 提示 `Rate limit reached`，请尝试以下网页水龙头领取：
+   > - [Solana Faucet](https://faucet.solana.com/)
+   > - [Web3.js Faucet](https://solfaucet.com/)
+   > - [QuickNode Faucet](https://faucet.quicknode.com/solana/devnet)
 
-```bash
-# 配置为本地网络
-solana config set --url localhost
+3. **构建与获取 Program ID**
+   ```bash
+   cd contract
+   
+   # 安装依赖
+   yarn install
 
-# (可选) 领取本地测试币
-solana airdrop 100
+   # 构建合约
+   anchor build
+   
+   # 获取生成的 Program ID
+   solana address -k target/deploy/soldora-keypair.json
+   ```
 
-# 部署合约
-anchor deploy
-```
+4. **更新 Program ID**
+   - 复制上一步获取的 Program ID。
+   - 打开 `contract/Anchor.toml`，更新 `[programs.devnet]` 下 `soldora` 的值为新的 ID。
+   - 打开 `src/idl/soldora.json`，更新 `address` 字段为新的 ID。
+
+5. **重新构建并部署**
+   ```bash
+   # 重新构建 (确保 IDL 中包含正确的地址)
+   anchor build
+   
+   # 部署到 Devnet
+   anchor deploy --provider.cluster devnet
+   ```
+
+#### 选项 B: 部署到 Localnet (本地调试)
+
+1. **启动本地测试链**
+   ```bash
+   solana-test-validator
+   ```
+
+2. **配置并部署**
+   ```bash
+   # 配置为本地网络
+   solana config set --url localhost
+   
+   # 部署
+   cd contract
+   anchor deploy --provider.cluster localnet
+   ```
+
+3. **注意**
+   如果使用 Localnet，请务必将 `src/components/WalletContextProvider.tsx` 中的 `network` 设置改回 `WalletAdapterNetwork.Localnet` 或手动指定 `endpoint` 为 `http://127.0.0.1:8899`。
 
 > 💡 **提示**: 
-> 1. 部署成功后，请将生成的 Program ID 更新到 `Anchor.toml` 和前端 IDL 文件 `src/idl/soldora.json` 中的 `address` 字段。
+> 1. 部署成功后，请务必将生成的 Program ID 更新到 `Anchor.toml` 和前端 IDL 文件 `src/idl/soldora.json` 中的 `address` 字段。
 > 2. 如果修改了 Program ID，需要重新运行 `anchor build` 和 `anchor deploy`。
+
+### 常见问题排查 (Troubleshooting)
+
+**Q: 部署时提示 `Operation timed out` 或 `Blockhash expired`？**
+A: 这是 Devnet 公共节点拥堵导致的。请尝试以下方法：
+
+1. **更换 RPC 节点**：
+   尝试使用其他公共节点进行部署：
+   ```bash
+   solana program deploy contract/target/deploy/soldora.so --url https://devnet.genesysgo.net
+   ```
+
+2. **检查并回收资金**：
+   部署超时失败可能会留下占用 SOL 的缓冲区账户 (Buffer Account)。
+   ```bash
+   # 查看是否有残留的缓冲区
+   solana program show --buffers
+   
+   # 关闭缓冲区回收 SOL (替换 <BUFFER_ADDRESS> 为实际地址)
+   solana program close <BUFFER_ADDRESS>
+   ```
 
 ### 3. 前端启动 (Frontend)
 

@@ -25,7 +25,7 @@ function ChallengeContent() {
     setCurrentUrl(window.location.href);
   }, []);
 
-  const finalShareUrl = currentUrl || `http://localhost:3000/market/${marketId}`;
+  const finalShareUrl = currentUrl || `https://prediction-market-dapp.netlify.app/market/${marketId}`;
 
   const handleDownload = async () => {
     if (!cardRef.current) return;

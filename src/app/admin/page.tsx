@@ -16,7 +16,7 @@ if (typeof window !== 'undefined') {
   (globalThis as any).Buffer = Buffer;
 }
 
-const ADMIN_WALLET = "2Po18XXnHJ1g6zWtwsnwXhgU9JGcSCt62KKtxaPvzPaZ";
+const ADMIN_WALLET = "8R7TCzkhdURCAWdwEiqbZAFVnRNkXVCG4XVgHjLGhUNH";
 
 export default function AdminPage() {
   const { publicKey } = useWallet();
