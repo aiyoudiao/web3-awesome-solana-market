@@ -90,6 +90,30 @@ class AudioManager {
   public getBuffer(key: string): AudioBuffer | undefined {
     return this.buffers.get(key);
   }
+
+  // 创建一个 3D 空间音源
+  public createSpatialSource() {
+    if (!this.ctx) return null;
+    const panner = this.ctx.createPanner();
+    panner.panningModel = 'HRTF';
+    panner.distanceModel = 'inverse';
+    panner.refDistance = 5;
+    panner.maxDistance = 1000;
+    panner.rolloffFactor = 1;
+    return panner;
+  }
+
+  // 生成白噪声 Buffer (公开方法)
+  public createNoiseBuffer(duration: number = 2): AudioBuffer | null {
+    if (!this.ctx) return null;
+    const bufferSize = this.ctx.sampleRate * duration;
+    const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      data[i] = Math.random() * 2 - 1;
+    }
+    return buffer;
+  }
 }
 
 export const audioManager = AudioManager.getInstance();

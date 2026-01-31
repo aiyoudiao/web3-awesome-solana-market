@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
 export type QualityLevel = "low" | "medium" | "high" | "ultra";
+export type VisualPreset = "esports" | "neon" | "cinematic";
 
 interface QualitySettings {
   level: QualityLevel;
@@ -14,6 +15,7 @@ interface QualitySettings {
   ssr: boolean; // 屏幕空间反射 (Screen Space Reflections)
   aa: boolean; // 抗锯齿 (Antialiasing)
   lodDistance: number; // LOD 视距倍率 (距离越远，模型越简化)
+  visualPreset: VisualPreset;
 }
 
 const PRESETS: Record<QualityLevel, QualitySettings> = {
@@ -28,6 +30,7 @@ const PRESETS: Record<QualityLevel, QualitySettings> = {
     ssr: false,
     aa: false,
     lodDistance: 0.5,
+    visualPreset: "esports",
   },
   medium: {
     level: "medium",
@@ -40,6 +43,7 @@ const PRESETS: Record<QualityLevel, QualitySettings> = {
     ssr: false,
     aa: true,
     lodDistance: 1.0,
+    visualPreset: "neon",
   },
   high: {
     level: "high",
@@ -52,6 +56,7 @@ const PRESETS: Record<QualityLevel, QualitySettings> = {
     ssr: false, // SSR 非常消耗性能，即使是 High 模式默认也不开启，除非 Ultra
     aa: true,
     lodDistance: 1.5,
+    visualPreset: "neon",
   },
   ultra: {
     level: "ultra",
@@ -64,11 +69,13 @@ const PRESETS: Record<QualityLevel, QualitySettings> = {
     ssr: true,
     aa: true,
     lodDistance: 2.0,
+    visualPreset: "cinematic",
   },
 };
 
 interface QualityState extends QualitySettings {
   setQuality: (level: QualityLevel) => void;
+  setVisualPreset: (preset: VisualPreset) => void;
   autoAdjust: (fps: number) => void;
   fps: number;
   setFps: (fps: number) => void;
@@ -82,6 +89,10 @@ export const useQualityStore = create<QualityState>()(
 
       setQuality: (level: QualityLevel) => {
         set({ ...PRESETS[level] });
+      },
+
+      setVisualPreset: (preset: VisualPreset) => {
+        set({ visualPreset: preset });
       },
 
       setFps: (fps: number) => set({ fps }),

@@ -1,457 +1,758 @@
-import { useRef, memo, useState, useEffect } from 'react';
+import { useRef, memo, useState, useEffect, useMemo, forwardRef } from 'react';
 import { useFrame } from '@react-three/fiber';
-import { Mesh, Vector3, Group, MathUtils } from 'three';
-import { Trail, Html } from '@react-three/drei';
+import { Mesh, Vector3, Group, MathUtils, Shape, ExtrudeGeometry, Color, ShaderMaterial, AdditiveBlending, MeshBasicMaterial } from 'three';
+import { Trail, Sparkles, Float, useTexture, GradientTexture, Html, shaderMaterial } from '@react-three/drei';
+import { useCarAudio } from '@/hooks/useCarAudio';
 import { CarLightningSystem } from './CarLightningSystem';
-import { audioManager } from '@/lib/audio/AudioManager';
+import { useStore } from '@/lib/store';
+import { extend } from '@react-three/fiber';
+import { createRuneTexture } from './runes';
+import { useQualityStore } from '@/stores/useQualityStore';
+import { TRINITY_MODES } from '@/mythic/trinity';
 
-interface CyberCarProps {
+// === Mythic Shield Shader ===
+const MythicShieldMaterial = shaderMaterial(
+  { time: 0, color1: new Color("#9945FF"), color2: new Color("#14F195") },
+  // Vertex Shader
+  `
+    varying vec2 vUv;
+    varying vec3 vNormal;
+    void main() {
+      vUv = uv;
+      vNormal = normalize(normalMatrix * normal);
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  // Fragment Shader
+  `
+    uniform float time;
+    uniform vec3 color1;
+    uniform vec3 color2;
+    varying vec2 vUv;
+    varying vec3 vNormal;
+
+    void main() {
+      // 动态能量波纹
+      float wave = sin(vUv.y * 10.0 - time * 2.0) * 0.5 + 0.5;
+      
+      // 边缘发光 (Fresnel)
+      float fresnel = pow(1.0 - dot(vNormal, vec3(0.0, 0.0, 1.0)), 3.0);
+      
+      // 混合颜色
+      vec3 finalColor = mix(color1, color2, wave);
+      
+      // 增加全息故障效果
+      float glitch = step(0.95, sin(vUv.y * 50.0 + time * 5.0));
+      finalColor += glitch * 0.5;
+
+      gl_FragColor = vec4(finalColor, 0.6 + fresnel * 0.4);
+    }
+  `
+);
+
+extend({ MythicShieldMaterial });
+
+declare global {
+  namespace JSX {
+    interface IntrinsicElements {
+      mythicShieldMaterial: any;
+    }
+  }
+}
+
+interface MythicVehicleProps {
   onPositionChange?: (position: { x: number; z: number }) => void;
   positionRef?: React.MutableRefObject<Vector3>;
-  // 接收外部输入，用于虚拟摇杆
   inputRef?: React.MutableRefObject<{ x: number; y: number }>;
-  // 暴露朝向，用于第一人称相机
   headingRef?: React.MutableRefObject<number>;
-  // 暴露速度，用于仪表盘
   speedRef?: React.MutableRefObject<number>;
 }
 
 /**
- * 赛博朋克赛车组件 (CyberCar)
+ * 神话赛博载具组件 (MythicVehicle)
  * @description
- * 替代原有的 Avatar 球体，提供真实的赛车驾驶体验。
- * 包含物理模拟（漂移、惯性）、车轮动画和粒子特效。
+ * 能够变形的三栖载具：
+ * 1. Kylin Cruiser (陆地 - 麒麟)
+ * 2. Leviathan Yacht (海洋 - 鲲)
+ * 3. Phoenix Jet (天空 - 朱雀)
  */
-export const CyberCar = memo(({ onPositionChange, positionRef, inputRef, headingRef, speedRef: externalSpeedRef }: CyberCarProps) => {
+export const CyberCar = memo(({ onPositionChange, positionRef, inputRef, headingRef, speedRef: externalSpeedRef }: MythicVehicleProps) => {
   const groupRef = useRef<Group>(null);
   const chassisRef = useRef<Group>(null);
-  const wheelFLRef = useRef<Mesh>(null); // Front Left
-  const wheelFRRef = useRef<Mesh>(null); // Front Right
-  const wheelBLRef = useRef<Mesh>(null); // Back Left
-  const wheelBRRef = useRef<Mesh>(null); // Back Right
-  const engineAudioRef = useRef<{ osc: OscillatorNode; gain: GainNode } | null>(null);
+  const shieldMatRef = useRef<any>(null);
+  const runeMatRef = useRef<MeshBasicMaterial>(null);
+  
+  // 车轮 Refs (仅 Car 模式使用)
+  const wheelFLRef = useRef<Group>(null);
+  const wheelFRRef = useRef<Group>(null);
+  const wheelBLRef = useRef<Group>(null);
+  const wheelBRRef = useRef<Group>(null);
 
-  // 物理状态 (使用 Ref 避免重渲染)
-  // 如果外部传入了 speedRef，则使用外部的，否则使用内部的
+  const tailSparklesRef = useRef<Group>(null);
+  const driftSparksRef = useRef<Group>(null);
+  const sonarRingRef = useRef<Mesh>(null);
+  const sonicRingRef = useRef<Mesh>(null);
+  const wingTrailLRef = useRef<Group>(null);
+  const wingTrailRRef = useRef<Group>(null);
+  const wakeTrailRef = useRef<Group>(null);
+  const afterburnerMeshRef = useRef<Mesh>(null);
+  const afterburnerMatRef = useRef<MeshBasicMaterial>(null);
+  const sonicProgress = useRef(0);
+  const sonicCooldown = useRef(0);
+  const prevSpeedRatioRef = useRef(0);
+
+  // 全局状态
+  const vehicleMode = useStore(state => state.vehicleMode);
+  const setVehicleMode = useStore(state => state.setVehicleMode);
+
+  const { visualPreset, level } = useQualityStore();
+  
+  // 音效系统
+  const { update: updateAudio } = useCarAudio();
+
+  // 物理状态
   const internalSpeedRef = useRef(0);
   const speed = externalSpeedRef || internalSpeedRef;
-  
   const steering = useRef(0);
   const heading = useRef(0);
   const position = useRef(new Vector3(0, 0.5, 8));
-  
-  // 键盘输入状态
   const keys = useRef<{ [key: string]: boolean }>({});
-
-  // 物理参数配置
-  const config = {
-    maxSpeed: 0.8,
-    acceleration: 0.02,
-    deceleration: 0.01,
-    friction: 0.98,
-    turnSpeed: 0.04,
-    driftFactor: 0.95, // 漂移因子 (1 = 无漂移, <1 = 像在冰上)
-  };
-
-  // 音效初始化
+  
+  // 飞行高度 (Jet 模式)
+  const altitude = useRef(0.5);
+  
+  // 变形特效状态
+  const [transforming, setTransforming] = useState(false);
+  
+  // 监听模式变化触发特效
   useEffect(() => {
-    // 简单的引擎音效模拟 (使用 AudioManager)
-    const ctx = audioManager.getContext();
-    if (!ctx) return;
-    
-    try {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      
-      osc.type = 'triangle'; // 三角波更接近柔和的引擎声
-      osc.frequency.value = 60; // 初始低频
-      osc.connect(gain);
-      gain.connect(audioManager.getMasterGain()!);
-      gain.gain.value = 0; // 初始静音，直到用户移动
-      
-      osc.start();
-      engineAudioRef.current = { osc, gain };
-      console.log('[Audio] Engine sound initialized');
-    } catch (e) {
-      console.error("[Audio] Engine init failed:", e);
+    setTransforming(true);
+    const timer = setTimeout(() => setTransforming(false), 1000);
+    return () => clearTimeout(timer);
+  }, [vehicleMode]);
+
+  useEffect(() => {
+    prevSpeedRatioRef.current = 0;
+    sonicProgress.current = 0;
+    sonicCooldown.current = 0;
+  }, [vehicleMode]);
+
+  // 物理配置 (根据模式动态调整)
+  const config = useMemo(() => {
+    switch (vehicleMode) {
+        case 'jet':
+            return { maxSpeed: 2.0, acceleration: 0.04, friction: 0.99, turnSpeed: 0.03, driftFactor: 1.0 };
+        case 'yacht':
+            return { maxSpeed: 0.8, acceleration: 0.01, friction: 0.96, turnSpeed: 0.02, driftFactor: 0.99 }; // 惯性大
+        case 'car':
+        default:
+            return { maxSpeed: 1.2, acceleration: 0.03, friction: 0.98, turnSpeed: 0.05, driftFactor: 0.92 };
     }
-    
-    return () => {
-      if (engineAudioRef.current) {
-        try {
-          const { osc, gain } = engineAudioRef.current;
-          // 平滑停止
-          gain.gain.setTargetAtTime(0, ctx.currentTime, 0.1);
-          osc.stop(ctx.currentTime + 0.2);
-        } catch (e) {
-           // ignore
-        }
-      }
-    };
-  }, []);
+  }, [vehicleMode]);
 
   // 键盘监听
   useEffect(() => {
-    // 自动聚焦以捕获键盘事件
     window.focus();
-    
-    const handleKeyDown = (e: KeyboardEvent) => { keys.current[e.code] = true; };
+    const handleKeyDown = (e: KeyboardEvent) => { 
+        keys.current[e.code] = true; 
+        // 模式切换快捷键
+        if (e.key === '1') setVehicleMode('car');
+        if (e.key === '2') setVehicleMode('yacht');
+        if (e.key === '3') setVehicleMode('jet');
+    };
     const handleKeyUp = (e: KeyboardEvent) => { keys.current[e.code] = false; };
-    
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
-    
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, []);
+  }, [setVehicleMode]);
 
   useFrame((state, delta) => {
-    // 1. 处理输入
+    // 1. 输入处理
     let targetSpeed = 0;
     let targetSteering = 0;
 
-    // 优先读取键盘
     if (keys.current['ArrowUp'] || keys.current['KeyW']) targetSpeed = config.maxSpeed;
     if (keys.current['ArrowDown'] || keys.current['KeyS']) targetSpeed = -config.maxSpeed * 0.5;
-
     if (keys.current['ArrowLeft'] || keys.current['KeyA']) targetSteering = 1;
     if (keys.current['ArrowRight'] || keys.current['KeyD']) targetSteering = -1;
 
-    // 如果没有键盘输入，尝试读取虚拟摇杆输入
+    // 虚拟摇杆
     if (inputRef && inputRef.current && targetSpeed === 0 && targetSteering === 0) {
-        // 摇杆 Y 轴：向上为负，向下为正（屏幕坐标），所以我们要取反
-        // 但是通常摇杆组件输出是归一化的。
-        // 假设 VirtualJoystick 输出: y < 0 向上, y > 0 向下
         const joyX = inputRef.current.x;
         const joyY = inputRef.current.y;
-        
-        // 只有当推力足够大时才响应
         if (Math.abs(joyY) > 0.1 || Math.abs(joyX) > 0.1) {
-            // Y轴控制速度 (-1 ~ 1) -> (maxSpeed ~ -maxSpeed)
             targetSpeed = -joyY * config.maxSpeed;
-            
-            // X轴控制转向 (-1 ~ 1) -> (1 ~ -1)
-            // 摇杆向左 (x<0) -> 转向 +1 (左转)
-            // 摇杆向右 (x>0) -> 转向 -1 (右转)
             targetSteering = -joyX;
         }
     }
 
-    // 更新引擎音效
-    if (engineAudioRef.current) {
-      const { osc, gain } = engineAudioRef.current;
-      const ctx = audioManager.getContext();
-      
-      if (ctx) {
-          const absSpeed = Math.abs(speed.current);
-          
-          // 降低基础频率，减少刺耳感
-          const targetFreq = 60 + absSpeed * 240;
-          osc.frequency.setTargetAtTime(targetFreq, ctx.currentTime, 0.1);
-          
-          if (osc.type !== 'triangle') osc.type = 'triangle';
-
-          const targetVol = absSpeed > 0.01 ? 0.05 : 0; // 稍微降低音量
-          gain.gain.setTargetAtTime(targetVol, ctx.currentTime, 0.2);
-      }
+    // === Gamepad Support (E-sports Level) ===
+    const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+    if (gamepads[0]) {
+        const gp = gamepads[0];
+        // Left Stick for Steering (Axis 0)
+        if (Math.abs(gp.axes[0]) > 0.1) {
+            targetSteering = -gp.axes[0]; // Invert for natural feel
+        }
+        // Triggers for Gas/Brake (Button 7 / Button 6)
+        // Or Right Trigger (Button 7) for Gas, Left Trigger (Button 6) for Brake
+        const gas = gp.buttons[7].value;
+        const brake = gp.buttons[6].value;
+        
+        if (gas > 0.1) {
+            targetSpeed = gas * config.maxSpeed;
+        } else if (brake > 0.1) {
+            targetSpeed = -brake * config.maxSpeed * 0.5;
+        }
+        
+        // Mode Switch via Face Buttons
+        if (gp.buttons[0].pressed) setVehicleMode('car');   // A / Cross
+        if (gp.buttons[1].pressed) setVehicleMode('yacht'); // B / Circle
+        if (gp.buttons[3].pressed) setVehicleMode('jet');   // Y / Triangle
     }
 
-    // 2. 物理模拟 (速度与转向平滑)
+    const isDrifting = Math.abs(steering.current) > 0.5 && Math.abs(speed.current) > 0.4;
+    const speedAbs = Math.abs(speed.current);
+    const speedRatio = Math.min(speedAbs / config.maxSpeed, 1);
+    const allowVfx = visualPreset !== 'esports' && level !== 'low';
+    const allowHeavyVfx = visualPreset !== 'esports' && (level === 'high' || level === 'ultra');
+    
+    // 传递 vehicleMode 参数给音效系统
+    updateAudio(speed.current, isDrifting, position.current, vehicleMode);
+
+    // 2. 物理更新
+    // 速度平滑
     if (targetSpeed > 0) {
         if (speed.current < targetSpeed) speed.current = Math.min(speed.current + config.acceleration, targetSpeed);
     } else if (targetSpeed < 0) {
         if (speed.current > targetSpeed) speed.current = Math.max(speed.current - config.acceleration, targetSpeed);
     } else {
-        // 自然减速
-        speed.current = speed.current * config.friction;
+        speed.current *= config.friction;
     }
-    
-    // 停止微小移动
     if (Math.abs(speed.current) < 0.001) speed.current = 0;
 
-    // 转向逻辑 (只有在移动时才能转向)
+    // 转向
     if (Math.abs(speed.current) > 0.01) {
       steering.current = MathUtils.lerp(steering.current, targetSteering, 0.1);
-      // 倒车时反向转向
       const direction = speed.current > 0 ? 1 : -1;
-      heading.current = heading.current + steering.current * config.turnSpeed * direction;
+      heading.current += steering.current * config.turnSpeed * direction;
     } else {
         steering.current = MathUtils.lerp(steering.current, 0, 0.1);
     }
 
-    // 3. 更新位置 (基于当前朝向)
+    // 飞行高度逻辑
+    let targetAltitude = 0.5; // Car/Yacht 默认高度
+    if (vehicleMode === 'jet') {
+        targetAltitude = 15.0; // 飞行高度
+        // 简单的起飞/降落平滑
+        altitude.current = MathUtils.lerp(altitude.current, targetAltitude, 0.02);
+    } else if (vehicleMode === 'yacht') {
+        targetAltitude = 0.2; // 浮在水面
+        // 浮力模拟
+        altitude.current = MathUtils.lerp(altitude.current, targetAltitude + Math.sin(state.clock.elapsedTime) * 0.1, 0.1);
+    } else {
+        // Car
+        altitude.current = MathUtils.lerp(altitude.current, 0.35, 0.1);
+    }
+
     const velocityX = Math.sin(heading.current) * speed.current;
     const velocityZ = Math.cos(heading.current) * speed.current;
-
-    // 直接修改 ref 中的位置状态
+    
     const newX = position.current.x + velocityX;
     const newZ = position.current.z + velocityZ;
     
-    // 扩大边界限制，从 ±400 缩小到 ±200，匹配新的地图尺寸
     position.current.x = Math.max(-200, Math.min(200, newX));
     position.current.z = Math.max(-200, Math.min(200, newZ));
+    position.current.y = altitude.current;
 
-    // 4. 应用变换到模型
+    // 3. 模型变换
     if (groupRef.current) {
-      // 优化：仅当位置或旋转发生显著变化时才更新 matrixWorld
-      // Three.js 默认每帧更新，但我们可以通过 matrixAutoUpdate=false 手动控制
-      // 但对于主角，每帧更新是必须的。
-      
       groupRef.current.position.set(position.current.x, position.current.y, position.current.z);
-      // 这里的 rotation 是车身的实际朝向
-      groupRef.current.rotation.y = heading.current;
       
-      // 模拟车身侧倾 (Body Roll)
-      // 转向越急，速度越快，侧倾越大
-      const bodyRoll = steering.current * speed.current * 0.5;
+      // 飞行模式下的倾斜 (Banking)
+      let bankAngle = 0;
+      if (vehicleMode === 'jet') {
+          bankAngle = -steering.current * 0.5; // 飞机转向侧倾明显
+      }
+      
+      groupRef.current.rotation.set(0, heading.current, bankAngle);
+      
+      // 车身微动作
       if (chassisRef.current) {
-          chassisRef.current.rotation.z = MathUtils.lerp(chassisRef.current.rotation.z, -bodyRoll, 0.1);
           // 加速抬头/刹车点头
           const pitch = (targetSpeed - speed.current) * 0.2;
+          // 叠加 bank
           chassisRef.current.rotation.x = MathUtils.lerp(chassisRef.current.rotation.x, -pitch, 0.1);
+          
+          if (vehicleMode === 'car') {
+             const bodyRoll = steering.current * speed.current * 0.3;
+             chassisRef.current.rotation.z = MathUtils.lerp(chassisRef.current.rotation.z, -bodyRoll, 0.1);
+          }
       }
     }
 
-    // 5. 车轮动画
-    const wheelRotationSpeed = speed.current * 10;
-    if (wheelFLRef.current && wheelFRRef.current) {
-        // 前轮转向
-        wheelFLRef.current.rotation.y = steering.current * 0.5;
-        wheelFRRef.current.rotation.y = steering.current * 0.5;
-        // 车轮滚动
-        wheelFLRef.current.rotation.x += wheelRotationSpeed;
-        wheelFRRef.current.rotation.x += wheelRotationSpeed;
-    }
-    if (wheelBLRef.current && wheelBRRef.current) {
-        // 后轮只滚动
-        wheelBLRef.current.rotation.x += wheelRotationSpeed;
-        wheelBRRef.current.rotation.x += wheelRotationSpeed;
+    // 4. 车轮动画 (仅 Car)
+    if (vehicleMode === 'car') {
+        const wheelRotationSpeed = speed.current * 15;
+        if (wheelFLRef.current && wheelFRRef.current) {
+            wheelFLRef.current.rotation.y = steering.current * 0.5;
+            wheelFRRef.current.rotation.y = steering.current * 0.5;
+            wheelFLRef.current.children[0].rotation.x += wheelRotationSpeed;
+            wheelFRRef.current.children[0].rotation.x += wheelRotationSpeed;
+        }
+        if (wheelBLRef.current && wheelBRRef.current) {
+            wheelBLRef.current.children[0].rotation.x += wheelRotationSpeed;
+            wheelBRRef.current.children[0].rotation.x += wheelRotationSpeed;
+        }
     }
 
-    // 6. 同步外部状态
-    // 优化：与 CameraFollower 同步
-    // CameraFollower 现在有自己的 lerp 逻辑，这里只需传递准确的物理位置
-    // 无需手动插值，避免双重平滑导致的迟滞或振荡
-    if (positionRef) {
-      positionRef.current.copy(position.current);
+    // 5. 状态同步
+    if (positionRef) positionRef.current.copy(position.current);
+    if (headingRef) headingRef.current = heading.current;
+    if (onPositionChange) onPositionChange({ x: position.current.x, z: position.current.z });
+
+    // 6. Shader Time Update
+    if (shieldMatRef.current) {
+        shieldMatRef.current.time = state.clock.elapsedTime;
     }
-    if (headingRef) {
-      headingRef.current = heading.current;
+    if (runeMatRef.current) {
+        const base = vehicleMode === 'jet' ? 0.13 : vehicleMode === 'yacht' ? 0.09 : 0.11;
+        const boost = transforming ? 0.22 : 0;
+        const flicker = 0.03 * (Math.sin(state.clock.elapsedTime * 3.0) * 0.5 + 0.5);
+        runeMatRef.current.opacity = Math.min(base + speedRatio * 0.08 + boost + flicker, 0.5);
     }
-    // 限制回调频率，例如每 100ms 更新一次 UI，或仅在停止时更新
-    // 这里保持每帧回调给 MiniMap，因为 MiniMap 已经做了 30fps 节流
-    if (onPositionChange) {
-      onPositionChange({ x: position.current.x, z: position.current.z });
+
+    if (tailSparklesRef.current) {
+        tailSparklesRef.current.visible = allowVfx && speedAbs > 0.5;
+    }
+
+    if (driftSparksRef.current) {
+        const enabled = vehicleMode === 'car' && isDrifting && allowVfx;
+        driftSparksRef.current.visible = enabled;
+        if (enabled && wheelBLRef.current && wheelBRRef.current) {
+            const x = (wheelBLRef.current.position.x + wheelBRRef.current.position.x) * 0.5;
+            const z = (wheelBLRef.current.position.z + wheelBRRef.current.position.z) * 0.5;
+            driftSparksRef.current.position.set(x, 0.2, z);
+        }
+    }
+
+    if (sonarRingRef.current) {
+        const enabled = vehicleMode === 'yacht' && allowVfx && speedAbs > 0.15;
+        sonarRingRef.current.visible = enabled;
+        if (enabled) {
+            const period = 1.6;
+            const p = (state.clock.elapsedTime % period) / period;
+            const scale = 0.6 + p * 4.2;
+            sonarRingRef.current.scale.set(scale, scale, scale);
+            const mat = sonarRingRef.current.material as any;
+            if (mat) mat.opacity = (1 - p) * 0.35;
+        }
+    }
+
+    if (sonicCooldown.current > 0) sonicCooldown.current = Math.max(0, sonicCooldown.current - delta);
+    if (vehicleMode === 'jet' && sonicCooldown.current === 0) {
+        if (prevSpeedRatioRef.current <= 0.95 && speedRatio > 0.95 && allowVfx) {
+            sonicProgress.current = 0.0001;
+            sonicCooldown.current = 1.2;
+        }
+    }
+    prevSpeedRatioRef.current = speedRatio;
+
+    if (sonicRingRef.current) {
+        const enabled = vehicleMode === 'jet' && allowVfx;
+        if (!enabled) {
+            sonicRingRef.current.visible = false;
+            sonicProgress.current = 0;
+        } else {
+            sonicRingRef.current.visible = sonicProgress.current > 0;
+            if (sonicProgress.current > 0) {
+                sonicProgress.current = Math.min(sonicProgress.current + delta * 1.25, 1);
+                const s = 1 + sonicProgress.current * 10;
+                sonicRingRef.current.scale.set(s, s, s);
+                const mat = sonicRingRef.current.material as any;
+                if (mat) mat.opacity = (1 - sonicProgress.current) * 0.45;
+                if (sonicProgress.current >= 1) sonicProgress.current = 0;
+            }
+        }
+    }
+
+    if (afterburnerMeshRef.current && afterburnerMatRef.current) {
+        const enabled = vehicleMode === 'jet' && allowVfx;
+        if (!enabled) {
+            afterburnerMeshRef.current.visible = false;
+        } else {
+            afterburnerMeshRef.current.visible = speedRatio > 0.62;
+            const heat = Math.max(0, (speedRatio - 0.62) / 0.38);
+            const flicker = 0.06 * (Math.sin(state.clock.elapsedTime * 20.0) * 0.5 + 0.5);
+            afterburnerMatRef.current.opacity = 0.1 + heat * 0.75 + flicker;
+            const s = 0.75 + heat * 0.65;
+            afterburnerMeshRef.current.scale.set(s, s, 1);
+        }
     }
   });
 
-  // 赛车配色 - Solana 品牌色 + 赛博朋克
-  const colors = {
-    body: "#000000", // 纯黑底色
-    glass: "#14F195", // Solana Green 玻璃
-    neon: "#9945FF", // Solana Purple 霓虹
-    neon2: "#14F195", // Solana Green 辅助
-    wheel: "#111111",
-    rim: "#FFFFFF"
-  };
+  // === 几何体构建 ===
+  
+  // 1. Car Shape (Wedge)
+  const carShape = useMemo(() => {
+    const shape = new Shape();
+    shape.moveTo(0, 0);
+    shape.lineTo(0.8, 0); shape.lineTo(0.9, 1.5); shape.lineTo(0.4, 3.5);
+    shape.lineTo(0.1, 4.2); shape.lineTo(-0.1, 4.2); shape.lineTo(-0.4, 3.5);
+    shape.lineTo(-0.9, 1.5); shape.lineTo(-0.8, 0);
+    return shape;
+  }, []);
 
-  // 能量核心旋转动画
-  useFrame((state) => {
-    if (chassisRef.current) {
-        // 核心脉冲
-        const core = chassisRef.current.getObjectByName("EnergyCore");
-        if (core) {
-            core.rotation.y += 0.1;
-            core.rotation.z += 0.05;
-            const scale = 1 + Math.sin(state.clock.elapsedTime * 5) * 0.1;
-            core.scale.set(scale, scale, scale);
-        }
-        
-        // 悬浮光环
-        const halo = chassisRef.current.getObjectByName("Halo");
-        if (halo) {
-            halo.rotation.z -= 0.02;
-        }
+  // 2. Jet Shape (Wings)
+  const jetShape = useMemo(() => {
+    const shape = new Shape();
+    shape.moveTo(0, 0);
+    shape.lineTo(2.5, -1.0); // 翼展
+    shape.lineTo(1.0, 2.0);
+    shape.lineTo(0.2, 5.0); // 机头
+    shape.lineTo(-0.2, 5.0);
+    shape.lineTo(-1.0, 2.0);
+    shape.lineTo(-2.5, -1.0);
+    return shape;
+  }, []);
+
+  // 3. Yacht Shape (Boat)
+  const yachtShape = useMemo(() => {
+    const shape = new Shape();
+    shape.moveTo(0, -1);
+    shape.quadraticCurveTo(1.2, 0, 1.0, 3.0);
+    shape.lineTo(0, 5.0); // 船头
+    shape.lineTo(-1.0, 3.0);
+    shape.quadraticCurveTo(-1.2, 0, 0, -1);
+    return shape;
+  }, []);
+
+  const extrudeSettings = useMemo(() => ({ steps: 1, depth: 0.5, bevelEnabled: true, bevelThickness: 0.1, bevelSize: 0.1, bevelSegments: 2 }), []);
+
+  const palette = TRINITY_MODES[vehicleMode].environment.palette;
+  const colors = useMemo(() => {
+    if (vehicleMode === 'jet') {
+      return {
+        bodyMain: "#050505",
+        bodyAccent: palette.accent,
+        glass: "#111111",
+        rim: "#222",
+        tire: "#080808",
+        glow: palette.accent,
+        engine: "#FF5A1F",
+      };
     }
-  });
+    if (vehicleMode === 'yacht') {
+      return {
+        bodyMain: "#050505",
+        bodyAccent: palette.primary,
+        glass: "#0A1220",
+        rim: "#222",
+        tire: "#080808",
+        glow: palette.primary,
+        engine: palette.primary,
+      };
+    }
+    return {
+      bodyMain: "#050505",
+      bodyAccent: palette.primary,
+      glass: "#111111",
+      rim: "#222",
+      tire: "#080808",
+      glow: palette.accent,
+      engine: palette.accent,
+    };
+  }, [palette.accent, palette.primary, vehicleMode]);
+
+  const runeMap = useMemo(() => {
+    return createRuneTexture({
+      size: 512,
+      seed: 1337,
+      tile: 4,
+      stroke: 'rgba(255,255,255,0.85)',
+      glow: 'rgba(20,241,149,0.22)',
+    });
+  }, []);
+
+  // Solana 渐变色配置
+  const solanaGradient = useMemo(() => {
+    return {
+      stops: [0, 0.5, 1],
+      colors: [palette.primary, palette.accent, palette.primary],
+    };
+  }, [palette.accent, palette.primary]);
+
+  const showHudTip = visualPreset !== 'esports' && level !== 'low';
+  const allowVfx = visualPreset !== 'esports' && level !== 'low';
+  const allowHeavyVfx = visualPreset !== 'esports' && (level === 'high' || level === 'ultra');
 
   return (
     <group ref={groupRef}>
-      {/* 挂载雷电特效系统 (传递速度 Ref) */}
-      <CarLightningSystem speedRef={speed} active={true} />
+      {/* HUD 提示 (跟随车辆) */}
+      {showHudTip ? (
+        <Html position={[0, 2, 0]} center distanceFactor={10}>
+          <div className="bg-black/50 text-white px-2 py-1 rounded text-xs whitespace-nowrap backdrop-blur-sm border border-white/20">
+            {TRINITY_MODES[vehicleMode].zhName} (1/2/3)
+          </div>
+        </Html>
+      ) : null}
 
-      {/* 尾气拖尾效果 */}
-      <Trail
-          width={1.2}
-          length={8}
-          color={colors.neon} // 紫色拖尾
-          attenuation={(t) => t * t}
-      >
-          <mesh position={[0.5, 0.2, -1.2]} visible={false}>
-              <boxGeometry args={[0.1, 0.1, 0.1]} />
-          </mesh>
-      </Trail>
-      <Trail
-          width={1.2}
-          length={8}
-          color={colors.neon2} // 绿色拖尾
-          attenuation={(t) => t * t}
-      >
-          <mesh position={[-0.5, 0.2, -1.2]} visible={false}>
-              <boxGeometry args={[0.1, 0.1, 0.1]} />
-          </mesh>
-      </Trail>
+      {vehicleMode === 'car' && allowHeavyVfx ? <CarLightningSystem speedRef={speed} active={true} /> : null}
 
-      {/* 车身组 (包含侧倾动画) */}
+      {vehicleMode === 'car' && allowVfx ? (
+        <group ref={driftSparksRef} visible={false}>
+          <group position={[0, 0.25, 0]}>
+            <Sparkles count={level === 'ultra' ? 56 : level === 'high' ? 40 : 24} scale={2.2} size={6} speed={2.6} opacity={0.55} color={colors.engine} />
+          </group>
+          <group position={[0, 0.22, -0.5]}>
+            <Sparkles count={level === 'ultra' ? 40 : level === 'high' ? 28 : 18} scale={2.8} size={5} speed={2.2} opacity={0.35} color={colors.glow} />
+          </group>
+        </group>
+      ) : null}
+
+      {vehicleMode === 'yacht' && allowVfx ? (
+        <mesh ref={sonarRingRef} position={[0, -0.25, -0.5]} rotation={[Math.PI / 2, 0, 0]} visible={false}>
+          <ringGeometry args={[0.9, 0.98, 64]} />
+          <meshBasicMaterial color={palette.primary} transparent opacity={0.2} depthWrite={false} blending={AdditiveBlending} side={2} toneMapped={false} />
+        </mesh>
+      ) : null}
+
+      {vehicleMode === 'jet' && allowVfx ? (
+        <mesh ref={sonicRingRef} position={[0, 0.65, 0.2]} visible={false}>
+          <ringGeometry args={[1.2, 1.35, 64]} />
+          <meshBasicMaterial color={colors.engine} transparent opacity={0.3} depthWrite={false} blending={AdditiveBlending} side={2} toneMapped={false} />
+        </mesh>
+      ) : null}
+
+      {allowVfx ? (
+        <group ref={tailSparklesRef} position={[0, 0.3, -2.2]} visible={false}>
+          <Sparkles
+            count={
+              vehicleMode === 'jet'
+                ? level === 'ultra'
+                  ? 56
+                  : level === 'high'
+                    ? 44
+                    : 30
+                : level === 'ultra'
+                  ? 26
+                  : level === 'high'
+                    ? 20
+                    : 14
+            }
+            scale={vehicleMode === 'jet' ? 4 : 2}
+            size={4}
+            speed={2}
+            opacity={0.5}
+            color={colors.engine}
+          />
+        </group>
+      ) : null}
+
+      {/* 能量拖尾 */}
+      {allowVfx && vehicleMode !== 'yacht' ? (
+        <>
+          <Trail width={vehicleMode === 'jet' ? 3 : 1.5} length={8} color={colors.glow} attenuation={(t) => t * t}>
+              <mesh position={[0.8, 0.2, -1.8]} visible={false}><boxGeometry args={[0.1,0.1,0.1]} /></mesh>
+          </Trail>
+          <Trail width={vehicleMode === 'jet' ? 3 : 1.5} length={8} color={colors.glow} attenuation={(t) => t * t}>
+              <mesh position={[-0.8, 0.2, -1.8]} visible={false}><boxGeometry args={[0.1,0.1,0.1]} /></mesh>
+          </Trail>
+        </>
+      ) : allowVfx && vehicleMode === 'yacht' ? (
+        <>
+          <Trail width={2.6} length={10} color={palette.primary} attenuation={(t) => t * t}>
+              <mesh ref={wakeTrailRef} position={[0, 0.05, -2.4]} visible={false}><boxGeometry args={[0.1,0.1,0.1]} /></mesh>
+          </Trail>
+          <Trail width={1.2} length={7} color={palette.accent} attenuation={(t) => t * t}>
+              <mesh position={[0, 0.05, -2.1]} visible={false}><boxGeometry args={[0.1,0.1,0.1]} /></mesh>
+          </Trail>
+        </>
+      ) : null}
+
+      {vehicleMode === 'jet' && allowHeavyVfx ? (
+        <>
+          <Trail width={1.2} length={12} color={palette.accent} attenuation={(t) => t * t}>
+              <mesh ref={wingTrailLRef} position={[2.2, 0.35, 0.2]} visible={false}><boxGeometry args={[0.1,0.1,0.1]} /></mesh>
+          </Trail>
+          <Trail width={1.2} length={12} color={palette.accent} attenuation={(t) => t * t}>
+              <mesh ref={wingTrailRRef} position={[-2.2, 0.35, 0.2]} visible={false}><boxGeometry args={[0.1,0.1,0.1]} /></mesh>
+          </Trail>
+        </>
+      ) : null}
+
+      {/* === 变形特效 (Transformation VFX) === */}
+      {transforming && (
+        <group position={[0, 0.5, 0]}>
+            {/* 爆发粒子 */}
+            <Sparkles count={50} scale={4} size={6} speed={5} color="#FFFFFF" opacity={1} />
+            {/* 扫描环 */}
+            <mesh rotation={[Math.PI/2, 0, 0]}>
+                <ringGeometry args={[2, 2.2, 32]} />
+                <meshBasicMaterial color={colors.glow} transparent opacity={0.5} side={2} />
+            </mesh>
+            <mesh rotation={[Math.PI/2, 0, 0]}>
+                <ringGeometry args={[1.5, 1.6, 32]} />
+                <meshBasicMaterial color={colors.bodyAccent} transparent opacity={0.8} side={2} />
+            </mesh>
+        </group>
+      )}
+
       <group ref={chassisRef}>
-        {/* === 主体结构 === */}
-        
-        {/* 1. 楔形底盘 (更具未来感) */}
-        <mesh position={[0, 0.25, 0]} castShadow receiveShadow>
-            <cylinderGeometry args={[0.6, 0.8, 2.4, 6]} />
+        {/* === 形态切换 === */}
+        {/* 能量护盾层 (略大) */}
+        <mesh rotation={[Math.PI/2, 0, 0]} position={[0, 0.3, -1.5]}>
+            <extrudeGeometry args={[
+                vehicleMode === 'car' ? carShape : 
+                vehicleMode === 'jet' ? jetShape : 
+                yachtShape, 
+                { ...extrudeSettings, depth: 0.55, bevelSize: 0.12 }
+            ]} />
+            {/* @ts-ignore */}
+            <mythicShieldMaterial ref={shieldMatRef} transparent side={2} depthWrite={false} blending={AdditiveBlending} />
+        </mesh>
+
+        <mesh rotation={[Math.PI/2, 0, 0]} position={[0, 0.3, -1.5]} castShadow receiveShadow>
+            <extrudeGeometry args={[
+                vehicleMode === 'car' ? carShape : 
+                vehicleMode === 'jet' ? jetShape : 
+                yachtShape, 
+                extrudeSettings
+            ]} />
             <meshPhysicalMaterial 
-              color={colors.body} 
-              metalness={0.9} 
-              roughness={0.2}
-              clearcoat={1.0}
+                metalness={0.8}
+                roughness={0.2}
+                clearcoat={1}
+                clearcoatRoughness={0.1}
+            >
+                <GradientTexture stops={solanaGradient.stops} colors={solanaGradient.colors} size={1024} />
+            </meshPhysicalMaterial>
+        </mesh>
+
+        <mesh rotation={[Math.PI/2, 0, 0]} position={[0, 0.301, -1.5]}>
+            <extrudeGeometry args={[
+                vehicleMode === 'car' ? carShape : 
+                vehicleMode === 'jet' ? jetShape : 
+                yachtShape, 
+                extrudeSettings
+            ]} />
+            <meshBasicMaterial
+              ref={runeMatRef}
+              map={runeMap}
+              transparent
+              opacity={0.12}
+              blending={AdditiveBlending}
+              depthWrite={false}
+              polygonOffset
+              polygonOffsetFactor={-2}
+              polygonOffsetUnits={-2}
+              toneMapped={false}
+              color={colors.glow}
+              side={2}
             />
         </mesh>
 
-        {/* 2. 驾驶舱罩 (流线型) */}
-        <mesh position={[0, 0.5, -0.2]}>
-            <capsuleGeometry args={[0.35, 0.8, 4, 8]} />
+        {/* === 驾驶舱 === */}
+        <mesh position={[0, 0.65, 0.2]}>
+            <coneGeometry args={[0.35, 1.8, 4]} />
             <meshPhysicalMaterial 
-              color={colors.glass} 
-              metalness={1} 
-              roughness={0}
-              transmission={0.6}
-              thickness={2}
-              emissive={colors.glass}
-              emissiveIntensity={0.2}
+                color={colors.glass}
+                metalness={1}
+                roughness={0}
+                transmission={0.2}
+                clearcoat={1}
             />
         </mesh>
 
-        {/* 3. 侧翼 (Solana 标志性线条) */}
-        <mesh position={[0.5, 0.3, 0.2]} rotation={[0, 0, -0.2]}>
-             <boxGeometry args={[0.1, 0.05, 1.8]} />
-             <meshStandardMaterial color={colors.neon} emissive={colors.neon} emissiveIntensity={5} />
-        </mesh>
-        <mesh position={[-0.5, 0.3, 0.2]} rotation={[0, 0, 0.2]}>
-             <boxGeometry args={[0.1, 0.05, 1.8]} />
-             <meshStandardMaterial color={colors.neon} emissive={colors.neon} emissiveIntensity={5} />
-        </mesh>
+        {/* === 装饰部件 === */}
+        {/* 只有 Jet 模式显示机翼光效 */}
+        {vehicleMode === 'jet' && (
+             <mesh position={[0, 0.1, 0.5]} rotation={[Math.PI/2, 0, 0]}>
+                <planeGeometry args={[5, 2]} />
+                <meshBasicMaterial color={colors.glow} transparent opacity={0.2} side={2} />
+             </mesh>
+        )}
 
-        {/* === 神话核心部件 === */}
-
-        {/* 4. 能量核心 (Solana Reactor) */}
-        <mesh name="EnergyCore" position={[0, 0.4, 1.1]}>
-            <octahedronGeometry args={[0.25, 0]} />
-            <meshStandardMaterial 
-                color={colors.neon2} 
-                emissive={colors.neon2} 
-                emissiveIntensity={8} 
-                wireframe={true}
-            />
-        </mesh>
-        <mesh position={[0, 0.4, 1.1]}>
-            <octahedronGeometry args={[0.15, 0]} />
-            <meshStandardMaterial color="#FFFFFF" emissive="#FFFFFF" emissiveIntensity={10} />
-        </mesh>
-
-        {/* 5. 悬浮光环 (Halo) */}
-        <mesh name="Halo" position={[0, 0.4, 1.1]} rotation={[Math.PI/2, 0, 0]}>
-            <torusGeometry args={[0.4, 0.02, 16, 100]} />
-            <meshStandardMaterial color={colors.neon} emissive={colors.neon} emissiveIntensity={5} />
-        </mesh>
-
-        {/* 6. 电路板纹理装饰 (简单几何模拟) */}
-        {[...Array(6)].map((_, i) => (
-            <mesh key={i} position={[0.35, 0.51, -0.5 + i * 0.2]} rotation={[0, 0, 0.5]}>
-                <boxGeometry args={[0.02, 0.02, 0.1]} />
-                <meshStandardMaterial color={colors.neon2} emissive={colors.neon2} emissiveIntensity={2} />
+        {vehicleMode === 'yacht' && (
+          <group position={[0, 0.15, -1.4]}>
+            <mesh position={[1.15, -0.35, 0]} rotation={[Math.PI / 2, 0, 0]}>
+              <cylinderGeometry args={[0.12, 0.12, 4.2, 16]} />
+              <meshStandardMaterial color={palette.accent} metalness={0.7} roughness={0.25} emissive={palette.primary} emissiveIntensity={0.35} toneMapped={false} />
             </mesh>
-        ))}
-        {[...Array(6)].map((_, i) => (
-            <mesh key={i} position={[-0.35, 0.51, -0.5 + i * 0.2]} rotation={[0, 0, -0.5]}>
-                <boxGeometry args={[0.02, 0.02, 0.1]} />
-                <meshStandardMaterial color={colors.neon2} emissive={colors.neon2} emissiveIntensity={2} />
+            <mesh position={[-1.15, -0.35, 0]} rotation={[Math.PI / 2, 0, 0]}>
+              <cylinderGeometry args={[0.12, 0.12, 4.2, 16]} />
+              <meshStandardMaterial color={palette.accent} metalness={0.7} roughness={0.25} emissive={palette.primary} emissiveIntensity={0.35} toneMapped={false} />
             </mesh>
-        ))}
-
-        {/* === 灯光系统 === */}
-
-        {/* 激光大灯 */}
-        <mesh position={[0.25, 0.2, 1.2]} rotation={[Math.PI/2, 0, 0]}>
-            <coneGeometry args={[0.1, 0.2, 16]} />
-            <meshStandardMaterial color={colors.neon2} emissive={colors.neon2} emissiveIntensity={10} />
-        </mesh>
-        <mesh position={[-0.25, 0.2, 1.2]} rotation={[Math.PI/2, 0, 0]}>
-            <coneGeometry args={[0.1, 0.2, 16]} />
-            <meshStandardMaterial color={colors.neon2} emissive={colors.neon2} emissiveIntensity={10} />
-        </mesh>
+            <mesh position={[0, -0.55, 1.6]}>
+              <boxGeometry args={[2.4, 0.05, 0.6]} />
+              <meshStandardMaterial color={palette.primary} metalness={0.6} roughness={0.35} emissive={palette.primary} emissiveIntensity={0.2} toneMapped={false} />
+            </mesh>
+          </group>
+        )}
         
-        {/* 底部氛围灯 */}
-        <pointLight position={[0, -0.5, 0]} distance={4} intensity={5} color={colors.neon} />
-
-        {/* 粒子喷射口 */}
-        <mesh position={[0, 0.4, -1.2]}>
-             <ringGeometry args={[0.1, 0.15, 32]} />
-             <meshStandardMaterial color={colors.neon} emissive={colors.neon} emissiveIntensity={5} side={2} />
-        </mesh>
+        {/* === 底部霓虹 (Underglow) === */}
+        <pointLight position={[0, -0.2, 0]} distance={5} intensity={3} color={colors.glow} />
       </group>
 
-      {/* === 磁悬浮车轮系统 === */}
+      {/* === 轮毂系统 (仅 Car 模式) === */}
+      {vehicleMode === 'car' && (
+          <>
+            <BladeWheel ref={wheelFLRef} position={[-0.9, 0.35, 1.4]} side="left" colors={colors} />
+            <BladeWheel ref={wheelFRRef} position={[0.9, 0.35, 1.4]} side="right" colors={colors} />
+            <BladeWheel ref={wheelBLRef} position={[-0.95, 0.38, -1.2]} side="left" colors={colors} isRear />
+            <BladeWheel ref={wheelBRRef} position={[0.95, 0.38, -1.2]} side="right" colors={colors} isRear />
+          </>
+      )}
       
-      {/* Front Left */}
-      <group position={[-0.6, 0.15, 0.8]}>
-        <mesh ref={wheelFLRef} rotation={[0, 0, Math.PI / 2]}>
-            <torusGeometry args={[0.2, 0.08, 16, 32]} />
-            <meshStandardMaterial color="#111" roughness={0.5} />
-            {/* 内发光圈 */}
-            <mesh rotation={[Math.PI/2, 0, 0]}>
-                <cylinderGeometry args={[0.18, 0.18, 0.05, 32]} />
-                <meshStandardMaterial color={colors.neon2} emissive={colors.neon2} emissiveIntensity={3} />
-            </mesh>
-        </mesh>
-      </group>
-
-      {/* Front Right */}
-      <group position={[0.6, 0.15, 0.8]}>
-        <mesh ref={wheelFRRef} rotation={[0, 0, Math.PI / 2]}>
-            <torusGeometry args={[0.2, 0.08, 16, 32]} />
-            <meshStandardMaterial color="#111" roughness={0.5} />
-            <mesh rotation={[Math.PI/2, 0, 0]}>
-                <cylinderGeometry args={[0.18, 0.18, 0.05, 32]} />
-                <meshStandardMaterial color={colors.neon2} emissive={colors.neon2} emissiveIntensity={3} />
-            </mesh>
-        </mesh>
-      </group>
-
-      {/* Back Left */}
-      <group position={[-0.65, 0.15, -0.8]}>
-        <mesh ref={wheelBLRef} rotation={[0, 0, Math.PI / 2]}>
-            <torusGeometry args={[0.22, 0.1, 16, 32]} />
-            <meshStandardMaterial color="#111" roughness={0.5} />
-            <mesh rotation={[Math.PI/2, 0, 0]}>
-                <cylinderGeometry args={[0.2, 0.2, 0.05, 32]} />
-                <meshStandardMaterial color={colors.neon} emissive={colors.neon} emissiveIntensity={3} />
-            </mesh>
-        </mesh>
-      </group>
-
-      {/* Back Right */}
-      <group position={[0.65, 0.15, -0.8]}>
-        <mesh ref={wheelBRRef} rotation={[0, 0, Math.PI / 2]}>
-            <torusGeometry args={[0.22, 0.1, 16, 32]} />
-            <meshStandardMaterial color="#111" roughness={0.5} />
-            <mesh rotation={[Math.PI/2, 0, 0]}>
-                <cylinderGeometry args={[0.2, 0.2, 0.05, 32]} />
-                <meshStandardMaterial color={colors.neon} emissive={colors.neon} emissiveIntensity={3} />
-            </mesh>
-        </mesh>
-      </group>
+      {/* === 喷射引擎 (Jet 模式) === */}
+      {vehicleMode === 'jet' && (
+           <group position={[0, 0.5, -2.5]}>
+                <mesh rotation={[Math.PI/2, 0, 0]}>
+                    <cylinderGeometry args={[0.4, 0.6, 1.0, 16]} />
+                    <meshStandardMaterial color="#333" />
+                </mesh>
+                <mesh position={[0, -0.6, 0]} rotation={[Math.PI/2, 0, 0]}>
+                     <coneGeometry args={[0.35, 0.8, 16]} />
+                     <meshBasicMaterial color={colors.engine} />
+                </mesh>
+                <mesh ref={afterburnerMeshRef} position={[0, -1.2, 0]} rotation={[Math.PI / 2, 0, 0]} visible={false}>
+                     <coneGeometry args={[0.55, 1.6, 20]} />
+                     <meshBasicMaterial ref={afterburnerMatRef} color={colors.engine} transparent opacity={0.2} depthWrite={false} blending={AdditiveBlending} toneMapped={false} />
+                </mesh>
+           </group>
+      )}
     </group>
   );
 });
+
+// 子组件：刀片式轮毂
+const BladeWheel = memo(forwardRef(({ position, side, colors, isRear }: any, ref: any) => {
+    const width = isRear ? 0.5 : 0.4;
+    const radius = isRear ? 0.38 : 0.35;
+    
+    return (
+        <group ref={ref} position={position}>
+            <group rotation={[0, 0, Math.PI / 2]}>
+                <mesh rotation={[Math.PI/2, 0, 0]}>
+                    <cylinderGeometry args={[radius, radius, width, 24]} />
+                    <meshStandardMaterial color={colors.tire} roughness={0.9} />
+                </mesh>
+                <mesh rotation={[Math.PI/2, 0, 0]}>
+                    <cylinderGeometry args={[radius * 0.7, radius * 0.7, width + 0.02, 16]} />
+                    <meshStandardMaterial color={colors.rim} metalness={0.9} roughness={0.2} />
+                </mesh>
+                {[0, 60, 120, 180, 240, 300].map((angle, i) => (
+                    <mesh key={i} rotation={[0, angle * Math.PI/180, 0]}>
+                        <boxGeometry args={[width + 0.04, 0.05, radius * 1.2]} />
+                        <meshPhysicalMaterial emissiveIntensity={2} toneMapped={false}>
+                            <GradientTexture stops={[0, 1]} colors={["#9945FF", "#14F195"]} />
+                        </meshPhysicalMaterial>
+                    </mesh>
+                ))}
+            </group>
+        </group>
+    );
+}));

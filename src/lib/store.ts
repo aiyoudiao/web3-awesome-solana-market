@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
+import type { MythicVehicleMode } from "@/mythic/types";
 
 /**
  * 全局状态管理接口
@@ -15,6 +16,9 @@ interface StoreState {
   /** 玩家当前坐标 (3D模式) */
   playerPos: { x: number; z: number };
 
+  /** 载具模式 */
+  vehicleMode: MythicVehicleMode;
+
   // 动作 Actions
 
   /**
@@ -22,6 +26,12 @@ interface StoreState {
    * @param mode 模式
    */
   setViewMode: (mode: "2d" | "3d") => void;
+
+  /**
+   * 设置载具模式
+   * @param mode 模式
+   */
+  setVehicleMode: (mode: MythicVehicleMode) => void;
 
   /**
    * 设置主题模式
@@ -49,6 +59,7 @@ export const useStore = create<StoreState>()(
       viewMode: "2d",
       theme: "dark",
       playerPos: { x: 0, z: 8 },
+      vehicleMode: "car",
 
       /**
        * 切换视图模式
@@ -56,6 +67,8 @@ export const useStore = create<StoreState>()(
       setViewMode: (mode) => {
         set({ viewMode: mode });
       },
+
+      setVehicleMode: (mode) => set({ vehicleMode: mode }),
 
       /**
        * 设置主题模式

@@ -23,8 +23,8 @@ interface MiniMapProps {
  */
 export const MiniMap = memo(({ markets, onMarketClick }: MiniMapProps) => {
   const mapSize = 160; 
-  // 基础视口半径 (最小缩放)
-  const baseViewRadius = 30;
+  // 基础视口半径 (最小缩放) - 扩大 5 倍以匹配新地图
+  const baseViewRadius = 150;
   
   // Refs for DOM manipulation
   const playerDotRef = useRef<HTMLDivElement>(null);
@@ -142,8 +142,11 @@ export const MiniMap = memo(({ markets, onMarketClick }: MiniMapProps) => {
         {/* 市场点位容器 - 使用 CSS 变量控制缩放 */}
         <div ref={marketDotsRef} className="absolute inset-0 pointer-events-none" style={{ '--map-scale': '1' } as any}>
             {markets.map((market, index) => {
-            const angle = (index / markets.length) * Math.PI * 2;
-            const radius = 10;
+            // 必须与 MarketList3D 的分布逻辑保持一致
+            const count = markets.length;
+            const angle = (index / count) * Math.PI * 2 * 3; // 3圈
+            const radius = 25 + (index / count) * 100; // 半径 25-125
+            
             const worldX = Math.sin(angle) * radius;
             const worldZ = Math.cos(angle) * radius;
 

@@ -4,7 +4,7 @@ import { Canvas, useThree } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import { usePathname } from 'next/navigation';
 import { useStore } from '@/lib/store';
-import { CyberpunkEnvironment } from './CyberpunkEnvironment';
+import { MythicEnvironment } from './MythicEnvironment';
 import { MarketList3D } from './MarketList3D';
 import { MarketDetail3D } from './MarketDetail3D';
 import { CreateMarket3D } from './CreateMarket3D';
@@ -13,12 +13,16 @@ import { MiniMap } from './MiniMap';
 import { useMarketListViewModel } from '@/hooks/view-models/useMarketListViewModel';
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { SolanaLightning } from './SolanaLightning';
-import { EffectComposer, Bloom } from '@react-three/postprocessing';
+import { EffectComposer, Bloom, ChromaticAberration, Noise, Vignette, DepthOfField } from '@react-three/postprocessing';
 import { PerformanceManager } from './PerformanceManager';
 import { useQualityStore, QualityLevel } from '@/stores/useQualityStore';
 import { VirtualJoystick } from './VirtualJoystick';
 import { Speedometer } from './Speedometer';
 import { CameraMode } from './CameraFollower';
+import { VehicleHUD } from './VehicleHUD';
+import { Vector2 } from 'three';
+import { computeEffectiveDpr, shouldEnableChromaticAberration, shouldEnableComposer, shouldEnableDof } from '@/mythic/visualPresets';
+import { TRINITY_MODES } from '@/mythic/trinity';
 
 /**
  * WebGL 上下文监听组件
@@ -179,12 +183,18 @@ export const SceneView = () => {
   // OPTIMIZATION: Only select what we need. Do NOT select playerPos here to prevent re-renders on every frame.
   const viewMode = useStore(state => state.viewMode);
   const setPlayerPos = useStore(state => state.setPlayerPos);
+  const vehicleMode = useStore(state => state.vehicleMode);
   // We don't need playerPos in this component anymore, MiniMap subscribes to it directly.
   
-  const { dpr, shadows, bloom, bloomIntensity } = useQualityStore();
+  const { dpr, shadows, bloom, bloomIntensity, level, aa, visualPreset } = useQualityStore();
   const pathname = usePathname();
   const [canvasKey, setCanvasKey] = useState(0);
   const [isContextLost, setIsContextLost] = useState(false);
+
+  const effectiveDpr = useMemo(() => computeEffectiveDpr(dpr, visualPreset), [dpr, visualPreset]);
+  const effectiveShadows = useMemo(() => (visualPreset === 'esports' ? false : shadows), [shadows, visualPreset]);
+  const enableComposer = useMemo(() => shouldEnableComposer(visualPreset, bloom, vehicleMode), [bloom, vehicleMode, visualPreset]);
+  const enableChromaticAberration = useMemo(() => shouldEnableChromaticAberration(visualPreset, vehicleMode), [vehicleMode, visualPreset]);
   
   // 虚拟摇杆状态
   const joystickRef = useRef({ x: 0, y: 0 });
@@ -193,6 +203,8 @@ export const SceneView = () => {
   
   // 相机模式状态
   const [cameraMode, setCameraMode] = useState<CameraMode>('follow');
+  const enableDof = useMemo(() => shouldEnableDof(visualPreset, level, cameraMode), [cameraMode, level, visualPreset]);
+  const backgroundColor = useMemo(() => TRINITY_MODES[vehicleMode].environment.palette.background, [vehicleMode]);
 
   const cameraModeLabels: Record<CameraMode, string> = {
     follow: '跟随',
@@ -208,17 +220,19 @@ export const SceneView = () => {
       });
   };
 
-  // ... (existing market logic)
+  // 获取市场数据用于 MiniMap
   const { allMarkets } = useMarketListViewModel();
-  // Optimize: Memoize miniMapMarkets to prevent MiniMap re-renders
-  const miniMapMarkets = useMemo(() => 
-      (allMarkets || []).map(m => ({ id: m.marketId, title: m.title })),
-  [allMarkets]);
 
-  // Optimize: Memoize callback
-  const handleMiniMapClick = useCallback((x: number, z: number) => { 
-      setPlayerPos({ x, z }); 
-  }, [setPlayerPos]);
+  // 转换市场数据格式
+  const miniMapMarkets = (allMarkets || []).map(m => ({
+    id: m.marketId,
+    title: m.title
+  }));
+
+  // 处理 MiniMap 点击跳转
+  const handleMiniMapClick = (x: number, z: number) => {
+    setPlayerPos({ x, z });
+  };
 
   useEffect(() => {
     if (viewMode === '3d') {
@@ -266,10 +280,10 @@ export const SceneView = () => {
     >
       <Canvas 
         key={canvasKey}
-        shadows={shadows}
-        dpr={[1, dpr]} 
+        shadows={effectiveShadows}
+        dpr={[1, effectiveDpr]} 
         gl={{ 
-          antialias: true, 
+          antialias: aa, 
           alpha: false, 
           stencil: false,
           depth: true,
@@ -282,15 +296,31 @@ export const SceneView = () => {
       >
         <ContextMonitor onContextLost={() => setIsContextLost(true)} onContextRestored={() => setIsContextLost(false)} />
         <PerformanceManager />
-        <color attach="background" args={['#1B1B1F']} />
+        <color attach="background" args={[backgroundColor]} />
         
-        {bloom && (
-            <EffectComposer enableNormalPass={false}>
+        {enableComposer && (
+          <EffectComposer enableNormalPass={false}>
+            <group>
+              {bloom ? (
                 <Bloom luminanceThreshold={1.5} intensity={bloomIntensity} radius={0.8} mipmapBlur />
-            </EffectComposer>
+              ) : null}
+              {enableChromaticAberration ? (
+                <ChromaticAberration
+                  offset={new Vector2(0.0015, 0.0015)}
+                  radialModulation={true}
+                  modulationOffset={0.5}
+                />
+              ) : null}
+              {enableDof ? (
+                <DepthOfField focusDistance={0.02} focalLength={0.06} bokehScale={2.2} />
+              ) : null}
+              {visualPreset !== 'esports' && level !== 'low' ? <Noise opacity={0.03} /> : null}
+              {visualPreset !== 'esports' && level !== 'low' ? <Vignette eskil={false} offset={0.12} darkness={0.4} /> : null}
+            </group>
+          </EffectComposer>
         )}
 
-        <CyberpunkEnvironment />
+        <MythicEnvironment />
         <SolanaLightning />
         
         {pathname === '/create' ? (
@@ -329,8 +359,17 @@ export const SceneView = () => {
       />
 
       <QualitySwitcher />
-      <MiniMap markets={miniMapMarkets} onMarketClick={handleMiniMapClick} />
+      {/* MiniMap Overlay - Always visible in 3D mode */}
+      <MiniMap 
+        markets={miniMapMarkets} 
+        onMarketClick={handleMiniMapClick}
+      />
       
+      {/* 载具 HUD (顶部切换器) */}
+      {!pathname.startsWith('/market/') && pathname !== '/create' && pathname !== '/challenge' && (
+          <VehicleHUD />
+      )}
+
       {/* 新手引导 (仅首次显示) */}
       <TutorialOverlay />
 
