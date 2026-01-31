@@ -57,7 +57,7 @@ export default function Home() {
             participants: participantsMap[event.publicKey.toString()] || 0,
             odds: { yes: yesOdds, no: noOdds },
             resolutionDate: new Date(event.account.deadline.toNumber() * 1000).toISOString(),
-            thumbnail: 'https://images.unsplash.com/photo-1621761191319-c6fb62004040?auto=format&fit=crop&q=80&w=1000', // Random crypto image
+            thumbnail: `https://placeholdit.com/600x400/F7931A/ffffff?text=${encodeURIComponent(event.account.description)}`, // Random crypto image
             status: event.account.status // Pass status for potential usage
         };
     });

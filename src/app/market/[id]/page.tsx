@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Flame, Share2, TrendingUp, Loader2, Send } from "lucide-react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useState, useEffect, useMemo } from "react";
-import { toast } from "sonner";
 import { clsx } from "clsx";
 import { useSoldoraProgram } from "@/hooks/useSoldoraProgram";
 import { LAMPORTS_PER_SOL } from "@solana/web3.js";
@@ -44,12 +43,12 @@ export default function MarketDetail() {
           queryClient.invalidateQueries({ queryKey: ['comments', id] });
       },
       onError: (err) => {
-          toast.error("发表评论失败: " + err.message);
+          alert("发表评论失败: " + err.message);
       }
   });
 
   const handlePostComment = () => {
-      if (!publicKey) return toast.error("请先连接钱包");
+      if (!publicKey) return alert("请先连接钱包");
       if (!commentContent.trim()) return;
       postCommentMutation.mutate(commentContent);
   };
@@ -95,7 +94,7 @@ export default function MarketDetail() {
           odds: { yes: yesOdds, no: noOdds },
           resolutionDate: new Date(event.account.deadline.toNumber() * 1000).toISOString(),
           trendingScore: 0,
-          thumbnail: 'https://images.unsplash.com/photo-1621761191319-c6fb62004040?auto=format&fit=crop&q=80&w=1000',
+          thumbnail: `https://placeholdit.com/600x400/F7931A/ffffff?text=${encodeURIComponent(event.account.description)}`, // Random crypto image
           description: event.account.description,
           liveScore: undefined,
           status: event.account.status
@@ -103,14 +102,14 @@ export default function MarketDetail() {
   }, [event, participantCount]);
 
   const handlePlaceBet = async () => {
-    if (!publicKey) return toast.error("请先连接钱包");
-    if (!selectedOutcome) return toast.warning("请选择一个结果 (是/否)");
-    if (!betAmount || parseFloat(betAmount) <= 0) return toast.warning("请输入有效金额");
-    if (!event) return toast.error("事件不存在");
+    if (!publicKey) return alert("请先连接钱包");
+    if (!selectedOutcome) return alert("请选择一个结果 (是/否)");
+    if (!betAmount || parseFloat(betAmount) <= 0) return alert("请输入有效金额");
+    if (!event) return alert("事件不存在");
 
     const success = await placeBet(event, selectedOutcome === 'yes', parseFloat(betAmount));
     if (success) {
-        toast.success("下注成功！");
+        alert("下注成功！");
         // Post a system comment about the bet
         postCommentMutation.mutate(`刚刚下注了 ${betAmount} SOL 买 ${selectedOutcome === 'yes' ? '是' : '否'}`);
         setBetAmount("");
