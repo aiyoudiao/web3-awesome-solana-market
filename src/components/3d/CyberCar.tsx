@@ -1,7 +1,7 @@
 import { useRef, memo, useState, useEffect, useMemo, forwardRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Mesh, Vector3, Group, MathUtils, Shape, ExtrudeGeometry, Color, ShaderMaterial, AdditiveBlending, MeshBasicMaterial } from 'three';
-import { Trail, Sparkles, Float, useTexture, GradientTexture, Html, shaderMaterial } from '@react-three/drei';
+import { Trail, Sparkles, Float, useTexture, GradientTexture, Html, shaderMaterial, Edges } from '@react-three/drei';
 import { useCarAudio } from '@/hooks/useCarAudio';
 import { CarLightningSystem } from './CarLightningSystem';
 import { useStore } from '@/lib/store';
@@ -50,13 +50,64 @@ const MythicShieldMaterial = shaderMaterial(
   `
 );
 
-extend({ MythicShieldMaterial });
+const EnergyBandMaterial = shaderMaterial(
+  { time: 0, color1: new Color("#9945FF"), color2: new Color("#14F195"), opacity: 0.55, flow: 1.0 },
+  `
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  `
+    uniform float time;
+    uniform vec3 color1;
+    uniform vec3 color2;
+    uniform float opacity;
+    uniform float flow;
+    varying vec2 vUv;
+
+    float hash(vec2 p) {
+      return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+    }
+
+    void main() {
+      float scan = sin((vUv.y * 10.0 + time * (2.4 * flow)) * 6.2831) * 0.5 + 0.5;
+      float stripe = smoothstep(0.35, 0.85, scan);
+      float edge = smoothstep(0.0, 0.06, vUv.x) * (1.0 - smoothstep(0.94, 1.0, vUv.x));
+      float noise = (hash(vUv * 64.0 + time) - 0.5) * 0.12;
+      float mixv = clamp(vUv.y + noise, 0.0, 1.0);
+      vec3 c = mix(color1, color2, mixv);
+      float a = opacity * (0.15 + stripe * 0.85) * edge;
+      gl_FragColor = vec4(c, a);
+    }
+  `
+);
+
+extend({ MythicShieldMaterial, EnergyBandMaterial });
 
 declare global {
   namespace JSX {
     interface IntrinsicElements {
       mythicShieldMaterial: any;
+      energyBandMaterial: any;
     }
+  }
+}
+
+declare module 'react' {
+  namespace JSX {
+    interface IntrinsicElements {
+      mythicShieldMaterial: any;
+      energyBandMaterial: any;
+    }
+  }
+}
+
+declare module '@react-three/fiber' {
+  interface ThreeElements {
+    mythicShieldMaterial: any;
+    energyBandMaterial: any;
   }
 }
 
@@ -79,7 +130,8 @@ interface MythicVehicleProps {
 export const CyberCar = memo(({ onPositionChange, positionRef, inputRef, headingRef, speedRef: externalSpeedRef }: MythicVehicleProps) => {
   const groupRef = useRef<Group>(null);
   const chassisRef = useRef<Group>(null);
-  const shieldMatRef = useRef<any>(null);
+  const shieldMatRefs = useRef<any[]>([]);
+  const bandMatRefs = useRef<any[]>([]);
   const runeMatRef = useRef<MeshBasicMaterial>(null);
   
   // 车轮 Refs (仅 Car 模式使用)
@@ -87,6 +139,9 @@ export const CyberCar = memo(({ onPositionChange, positionRef, inputRef, heading
   const wheelFRRef = useRef<Group>(null);
   const wheelBLRef = useRef<Group>(null);
   const wheelBRRef = useRef<Group>(null);
+
+  const driftAnchorRef = useRef<Group>(null);
+  const tailAnchorRef = useRef<Group>(null);
 
   const tailSparklesRef = useRef<Group>(null);
   const driftSparksRef = useRef<Group>(null);
@@ -315,8 +370,11 @@ export const CyberCar = memo(({ onPositionChange, positionRef, inputRef, heading
     if (onPositionChange) onPositionChange({ x: position.current.x, z: position.current.z });
 
     // 6. Shader Time Update
-    if (shieldMatRef.current) {
-        shieldMatRef.current.time = state.clock.elapsedTime;
+    for (const mat of shieldMatRefs.current) {
+        if (mat) mat.time = state.clock.elapsedTime;
+    }
+    for (const mat of bandMatRefs.current) {
+        if (mat) mat.time = state.clock.elapsedTime;
     }
     if (runeMatRef.current) {
         const base = vehicleMode === 'jet' ? 0.13 : vehicleMode === 'yacht' ? 0.09 : 0.11;
@@ -327,15 +385,14 @@ export const CyberCar = memo(({ onPositionChange, positionRef, inputRef, heading
 
     if (tailSparklesRef.current) {
         tailSparklesRef.current.visible = allowVfx && speedAbs > 0.5;
+        if (tailAnchorRef.current) tailSparklesRef.current.position.copy(tailAnchorRef.current.position);
     }
 
     if (driftSparksRef.current) {
         const enabled = vehicleMode === 'car' && isDrifting && allowVfx;
         driftSparksRef.current.visible = enabled;
-        if (enabled && wheelBLRef.current && wheelBRRef.current) {
-            const x = (wheelBLRef.current.position.x + wheelBRRef.current.position.x) * 0.5;
-            const z = (wheelBLRef.current.position.z + wheelBRRef.current.position.z) * 0.5;
-            driftSparksRef.current.position.set(x, 0.2, z);
+        if (enabled && driftAnchorRef.current) {
+            driftSparksRef.current.position.copy(driftAnchorRef.current.position);
         }
     }
 
@@ -399,34 +456,43 @@ export const CyberCar = memo(({ onPositionChange, positionRef, inputRef, heading
   // 1. Car Shape (Wedge)
   const carShape = useMemo(() => {
     const shape = new Shape();
-    shape.moveTo(0, 0);
-    shape.lineTo(0.8, 0); shape.lineTo(0.9, 1.5); shape.lineTo(0.4, 3.5);
-    shape.lineTo(0.1, 4.2); shape.lineTo(-0.1, 4.2); shape.lineTo(-0.4, 3.5);
-    shape.lineTo(-0.9, 1.5); shape.lineTo(-0.8, 0);
+    shape.moveTo(0, -0.2);
+    shape.lineTo(1.1, 0.0);
+    shape.quadraticCurveTo(1.45, 1.2, 1.18, 2.2);
+    shape.lineTo(0.92, 3.95);
+    shape.lineTo(0.28, 5.35);
+    shape.lineTo(0.0, 5.55);
+    shape.lineTo(-0.28, 5.35);
+    shape.lineTo(-0.92, 3.95);
+    shape.lineTo(-1.18, 2.2);
+    shape.quadraticCurveTo(-1.45, 1.2, -1.1, 0.0);
     return shape;
   }, []);
 
   // 2. Jet Shape (Wings)
   const jetShape = useMemo(() => {
     const shape = new Shape();
-    shape.moveTo(0, 0);
-    shape.lineTo(2.5, -1.0); // 翼展
-    shape.lineTo(1.0, 2.0);
-    shape.lineTo(0.2, 5.0); // 机头
-    shape.lineTo(-0.2, 5.0);
-    shape.lineTo(-1.0, 2.0);
-    shape.lineTo(-2.5, -1.0);
+    shape.moveTo(0, -0.4);
+    shape.lineTo(3.2, -1.6);
+    shape.lineTo(1.55, 1.65);
+    shape.lineTo(0.55, 4.6);
+    shape.lineTo(0.0, 5.7);
+    shape.lineTo(-0.55, 4.6);
+    shape.lineTo(-1.55, 1.65);
+    shape.lineTo(-3.2, -1.6);
     return shape;
   }, []);
 
   // 3. Yacht Shape (Boat)
   const yachtShape = useMemo(() => {
     const shape = new Shape();
-    shape.moveTo(0, -1);
-    shape.quadraticCurveTo(1.2, 0, 1.0, 3.0);
-    shape.lineTo(0, 5.0); // 船头
-    shape.lineTo(-1.0, 3.0);
-    shape.quadraticCurveTo(-1.2, 0, 0, -1);
+    shape.moveTo(0, -1.3);
+    shape.quadraticCurveTo(1.9, -0.4, 1.65, 3.3);
+    shape.lineTo(0.95, 5.15);
+    shape.lineTo(0.0, 6.05);
+    shape.lineTo(-0.95, 5.15);
+    shape.lineTo(-1.65, 3.3);
+    shape.quadraticCurveTo(-1.9, -0.4, 0, -1.3);
     return shape;
   }, []);
 
@@ -477,6 +543,19 @@ export const CyberCar = memo(({ onPositionChange, positionRef, inputRef, heading
     });
   }, []);
 
+  const cyberMap = useMemo(() => {
+    const tex = createRuneTexture({
+      size: 512,
+      seed: vehicleMode === 'jet' ? 4207 : vehicleMode === 'yacht' ? 917 : 2222,
+      tile: 10,
+      stroke: `rgba(0,240,255,0.55)`,
+      glow: `rgba(153,69,255,0.18)`,
+      background: 'rgba(0,0,0,0)',
+    });
+    tex.repeat.set(10, 10);
+    return tex;
+  }, [vehicleMode]);
+
   // Solana 渐变色配置
   const solanaGradient = useMemo(() => {
     return {
@@ -488,6 +567,21 @@ export const CyberCar = memo(({ onPositionChange, positionRef, inputRef, heading
   const showHudTip = visualPreset !== 'esports' && level !== 'low';
   const allowVfx = visualPreset !== 'esports' && level !== 'low';
   const allowHeavyVfx = visualPreset !== 'esports' && (level === 'high' || level === 'ultra');
+  const skinGlowIntensity = useMemo(() => {
+    if (visualPreset === 'esports' || level === 'low') return 0.08;
+    if (visualPreset === 'neon') return level === 'ultra' ? 1.15 : level === 'high' ? 0.95 : 0.75;
+    return level === 'ultra' ? 0.65 : level === 'high' ? 0.5 : 0.38;
+  }, [level, visualPreset]);
+  const underglowIntensity = useMemo(() => {
+    if (visualPreset === 'esports' || level === 'low') return 1.4;
+    if (visualPreset === 'neon') return level === 'ultra' ? 6.2 : level === 'high' ? 5.2 : 4.2;
+    return level === 'ultra' ? 4.2 : level === 'high' ? 3.6 : 3.0;
+  }, [level, visualPreset]);
+  const cyberDecalOpacity = useMemo(() => {
+    if (visualPreset === 'esports' || level === 'low') return 0;
+    if (visualPreset === 'neon') return level === 'ultra' ? 0.18 : level === 'high' ? 0.15 : 0.12;
+    return level === 'ultra' ? 0.12 : level === 'high' ? 0.1 : 0.08;
+  }, [level, visualPreset]);
 
   return (
     <group ref={groupRef}>
@@ -528,7 +622,7 @@ export const CyberCar = memo(({ onPositionChange, positionRef, inputRef, heading
       ) : null}
 
       {allowVfx ? (
-        <group ref={tailSparklesRef} position={[0, 0.3, -2.2]} visible={false}>
+        <group ref={tailSparklesRef} position={[0, 0, 0]} visible={false}>
           <Sparkles
             count={
               vehicleMode === 'jet'
@@ -576,10 +670,10 @@ export const CyberCar = memo(({ onPositionChange, positionRef, inputRef, heading
       {vehicleMode === 'jet' && allowHeavyVfx ? (
         <>
           <Trail width={1.2} length={12} color={palette.accent} attenuation={(t) => t * t}>
-              <mesh ref={wingTrailLRef} position={[2.2, 0.35, 0.2]} visible={false}><boxGeometry args={[0.1,0.1,0.1]} /></mesh>
+              <mesh ref={wingTrailLRef} position={[3.35, 0.25, 0.85]} visible={false}><boxGeometry args={[0.1,0.1,0.1]} /></mesh>
           </Trail>
           <Trail width={1.2} length={12} color={palette.accent} attenuation={(t) => t * t}>
-              <mesh ref={wingTrailRRef} position={[-2.2, 0.35, 0.2]} visible={false}><boxGeometry args={[0.1,0.1,0.1]} /></mesh>
+              <mesh ref={wingTrailRRef} position={[-3.35, 0.25, 0.85]} visible={false}><boxGeometry args={[0.1,0.1,0.1]} /></mesh>
           </Trail>
         </>
       ) : null}
@@ -602,157 +696,309 @@ export const CyberCar = memo(({ onPositionChange, positionRef, inputRef, heading
       )}
 
       <group ref={chassisRef}>
-        {/* === 形态切换 === */}
-        {/* 能量护盾层 (略大) */}
-        <mesh rotation={[Math.PI/2, 0, 0]} position={[0, 0.3, -1.5]}>
-            <extrudeGeometry args={[
-                vehicleMode === 'car' ? carShape : 
-                vehicleMode === 'jet' ? jetShape : 
-                yachtShape, 
-                { ...extrudeSettings, depth: 0.55, bevelSize: 0.12 }
-            ]} />
-            {/* @ts-ignore */}
-            <mythicShieldMaterial ref={shieldMatRef} transparent side={2} depthWrite={false} blending={AdditiveBlending} />
-        </mesh>
+        {vehicleMode === 'car' ? (
+          <group>
+            <group ref={tailAnchorRef} position={[0, 0.22, -2.85]} />
+            <group ref={driftAnchorRef} position={[0, 0.18, -2.25]} />
 
-        <mesh rotation={[Math.PI/2, 0, 0]} position={[0, 0.3, -1.5]} castShadow receiveShadow>
-            <extrudeGeometry args={[
-                vehicleMode === 'car' ? carShape : 
-                vehicleMode === 'jet' ? jetShape : 
-                yachtShape, 
-                extrudeSettings
-            ]} />
-            <meshPhysicalMaterial 
-                metalness={0.8}
-                roughness={0.2}
-                clearcoat={1}
-                clearcoatRoughness={0.1}
-            >
-                <GradientTexture stops={solanaGradient.stops} colors={solanaGradient.colors} size={1024} />
-            </meshPhysicalMaterial>
-        </mesh>
-
-        <mesh rotation={[Math.PI/2, 0, 0]} position={[0, 0.301, -1.5]}>
-            <extrudeGeometry args={[
-                vehicleMode === 'car' ? carShape : 
-                vehicleMode === 'jet' ? jetShape : 
-                yachtShape, 
-                extrudeSettings
-            ]} />
-            <meshBasicMaterial
-              ref={runeMatRef}
-              map={runeMap}
-              transparent
-              opacity={0.12}
-              blending={AdditiveBlending}
-              depthWrite={false}
-              polygonOffset
-              polygonOffsetFactor={-2}
-              polygonOffsetUnits={-2}
-              toneMapped={false}
-              color={colors.glow}
-              side={2}
-            />
-        </mesh>
-
-        {/* === 驾驶舱 === */}
-        <mesh position={[0, 0.65, 0.2]}>
-            <coneGeometry args={[0.35, 1.8, 4]} />
-            <meshPhysicalMaterial 
-                color={colors.glass}
-                metalness={1}
-                roughness={0}
-                transmission={0.2}
-                clearcoat={1}
-            />
-        </mesh>
-
-        {/* === 装饰部件 === */}
-        {/* 只有 Jet 模式显示机翼光效 */}
-        {vehicleMode === 'jet' && (
-             <mesh position={[0, 0.1, 0.5]} rotation={[Math.PI/2, 0, 0]}>
-                <planeGeometry args={[5, 2]} />
-                <meshBasicMaterial color={colors.glow} transparent opacity={0.2} side={2} />
-             </mesh>
-        )}
-
-        {vehicleMode === 'yacht' && (
-          <group position={[0, 0.15, -1.4]}>
-            <mesh position={[1.15, -0.35, 0]} rotation={[Math.PI / 2, 0, 0]}>
-              <cylinderGeometry args={[0.12, 0.12, 4.2, 16]} />
-              <meshStandardMaterial color={palette.accent} metalness={0.7} roughness={0.25} emissive={palette.primary} emissiveIntensity={0.35} toneMapped={false} />
+            <mesh position={[0, 0.35, 0.2]} rotation={[Math.PI / 2, 0, 0]} castShadow receiveShadow>
+              <capsuleGeometry args={[0.46, 4.9, 10, 18]} />
+              <meshStandardMaterial color={colors.bodyMain} metalness={0.95} roughness={0.22} emissive={palette.accent} emissiveIntensity={skinGlowIntensity * 0.6} toneMapped={false} />
+              {visualPreset !== 'esports' && level !== 'low' ? <Edges threshold={14} color={palette.accent} /> : null}
             </mesh>
-            <mesh position={[-1.15, -0.35, 0]} rotation={[Math.PI / 2, 0, 0]}>
-              <cylinderGeometry args={[0.12, 0.12, 4.2, 16]} />
-              <meshStandardMaterial color={palette.accent} metalness={0.7} roughness={0.25} emissive={palette.primary} emissiveIntensity={0.35} toneMapped={false} />
+
+            {visualPreset !== 'esports' && level !== 'low' ? (
+              <group>
+                <mesh position={[0.92, 0.34, 0.18]}>
+                  <boxGeometry args={[0.06, 0.02, 5.15]} />
+                  <energyBandMaterial ref={(mat: any) => { if (mat) bandMatRefs.current[0] = mat; }} transparent depthWrite={false} blending={AdditiveBlending} toneMapped={false} opacity={0.85} flow={1.15} color1={palette.primary} color2={palette.accent} />
+                </mesh>
+                <mesh position={[-0.92, 0.34, 0.18]}>
+                  <boxGeometry args={[0.06, 0.02, 5.15]} />
+                  <energyBandMaterial ref={(mat: any) => { if (mat) bandMatRefs.current[1] = mat; }} transparent depthWrite={false} blending={AdditiveBlending} toneMapped={false} opacity={0.85} flow={1.15} color1={palette.primary} color2={palette.accent} />
+                </mesh>
+                <mesh position={[0, 0.48, -0.2]} rotation={[Math.PI / 2, 0, 0]}>
+                  <torusGeometry args={[1.05, 0.025, 12, 64]} />
+                  <energyBandMaterial ref={(mat: any) => { if (mat) bandMatRefs.current[2] = mat; }} transparent depthWrite={false} blending={AdditiveBlending} toneMapped={false} opacity={0.9} flow={1.0} color1={palette.accent} color2={palette.primary} />
+                </mesh>
+              </group>
+            ) : null}
+
+            <mesh position={[0, 0.62, 1.35]} rotation={[0, 0, 0]}>
+              <sphereGeometry args={[0.42, 18, 18]} />
+              <meshPhysicalMaterial color={colors.glass} metalness={0.15} roughness={0.06} transmission={0.65} thickness={0.22} clearcoat={1} />
             </mesh>
-            <mesh position={[0, -0.55, 1.6]}>
-              <boxGeometry args={[2.4, 0.05, 0.6]} />
-              <meshStandardMaterial color={palette.primary} metalness={0.6} roughness={0.35} emissive={palette.primary} emissiveIntensity={0.2} toneMapped={false} />
+
+            {visualPreset !== 'esports' && level !== 'low' ? (
+              <group>
+                <mesh position={[0.28, 0.92, 1.95]} rotation={[0.65, 0.25, 0.15]}>
+                  <coneGeometry args={[0.07, 0.85, 12]} />
+                  <meshStandardMaterial color="#0B1220" metalness={0.9} roughness={0.25} emissive={palette.accent} emissiveIntensity={0.35} toneMapped={false} />
+                </mesh>
+                <mesh position={[-0.28, 0.92, 1.95]} rotation={[0.65, -0.25, -0.15]}>
+                  <coneGeometry args={[0.07, 0.85, 12]} />
+                  <meshStandardMaterial color="#0B1220" metalness={0.9} roughness={0.25} emissive={palette.accent} emissiveIntensity={0.35} toneMapped={false} />
+                </mesh>
+                <mesh position={[0.38, 0.86, 1.85]} rotation={[0.4, 0.25, 0]}>
+                  <boxGeometry args={[0.03, 0.22, 0.03]} />
+                  <meshBasicMaterial color={palette.primary} transparent opacity={0.8} blending={AdditiveBlending} toneMapped={false} depthWrite={false} />
+                </mesh>
+                <mesh position={[-0.38, 0.86, 1.85]} rotation={[0.4, -0.25, 0]}>
+                  <boxGeometry args={[0.03, 0.22, 0.03]} />
+                  <meshBasicMaterial color={palette.primary} transparent opacity={0.8} blending={AdditiveBlending} toneMapped={false} depthWrite={false} />
+                </mesh>
+              </group>
+            ) : null}
+
+            <mesh position={[0, 0.18, 0.25]}>
+              <boxGeometry args={[1.65, 0.18, 4.7]} />
+              <meshStandardMaterial color="#06070B" metalness={0.9} roughness={0.35} />
             </mesh>
+
+            {visualPreset !== 'esports' && level !== 'low' ? (
+              <mesh position={[0, 0.28, 0.2]}>
+                <boxGeometry args={[0.08, 0.04, 4.9]} />
+                <meshPhysicalMaterial emissiveIntensity={1.8} toneMapped={false}>
+                  <GradientTexture stops={[0, 0.5, 1]} colors={[palette.primary, palette.accent, palette.primary]} size={512} />
+                </meshPhysicalMaterial>
+              </mesh>
+            ) : null}
+
+            <mesh position={[0, 0.48, 0.15]} rotation={[Math.PI / 2, 0, 0]}>
+              <torusGeometry args={[1.05, 0.04, 12, 64]} />
+              {/* @ts-ignore */}
+              <mythicShieldMaterial ref={(mat: any) => { if (mat) shieldMatRefs.current[0] = mat; }} transparent side={2} depthWrite={false} blending={AdditiveBlending} />
+            </mesh>
+
+            <group>
+              {([
+                [0.95, 0.08, 1.9],
+                [-0.95, 0.08, 1.9],
+                [0.95, 0.08, -2.05],
+                [-0.95, 0.08, -2.05],
+              ] as const).map(([x, y, z], i) => (
+                <group key={i} position={[x, y, z]}>
+                  <mesh rotation={[Math.PI / 2, 0, 0]}>
+                    <torusGeometry args={[0.24, 0.06, 12, 24]} />
+                    <meshStandardMaterial color="#050505" metalness={0.95} roughness={0.25} emissive={palette.primary} emissiveIntensity={level === 'ultra' ? 0.35 : 0.25} toneMapped={false} />
+                  </mesh>
+                  {visualPreset !== 'esports' && level !== 'low' ? (
+                    <mesh rotation={[Math.PI / 2, 0, 0]}>
+                      <torusGeometry args={[0.18, 0.03, 12, 24]} />
+                      <meshBasicMaterial color={palette.accent} transparent opacity={0.75} blending={AdditiveBlending} toneMapped={false} depthWrite={false} />
+                    </mesh>
+                  ) : null}
+                </group>
+              ))}
+            </group>
+
+            {visualPreset !== 'esports' && level !== 'low' ? (
+              <Float speed={1.2} floatIntensity={0.25} rotationIntensity={0.25}>
+                <group position={[0, 1.18, 0.8]}>
+                  <mesh rotation={[Math.PI / 2, 0, 0]}>
+                    <ringGeometry args={[0.22, 0.28, 48]} />
+                    <meshBasicMaterial color={palette.accent} transparent opacity={0.7} blending={AdditiveBlending} toneMapped={false} depthWrite={false} />
+                  </mesh>
+                  <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, 0, 0.01]}>
+                    <circleGeometry args={[0.18, 32]} />
+                    <energyBandMaterial ref={(mat: any) => { if (mat) bandMatRefs.current[3] = mat; }} transparent depthWrite={false} blending={AdditiveBlending} toneMapped={false} opacity={0.85} flow={0.8} color1={palette.primary} color2={palette.accent} />
+                  </mesh>
+                </group>
+              </Float>
+            ) : null}
+          </group>
+        ) : vehicleMode === 'yacht' ? (
+          <group>
+            <group ref={tailAnchorRef} position={[0, 0.12, -3.05]} />
+
+            <mesh position={[0, 0.24, 0.6]} rotation={[Math.PI / 2, 0, 0]} castShadow receiveShadow>
+              <capsuleGeometry args={[0.55, 6.2, 10, 18]} />
+              <meshStandardMaterial color={colors.bodyMain} metalness={0.92} roughness={0.26} emissive={palette.primary} emissiveIntensity={skinGlowIntensity * 0.35} toneMapped={false} />
+              {visualPreset !== 'esports' && level !== 'low' ? <Edges threshold={14} color={palette.primary} /> : null}
+            </mesh>
+
+            {visualPreset !== 'esports' && level !== 'low' ? (
+              <group>
+                <mesh position={[1.65, 0.55, 0.5]} rotation={[0, 0.15, 0]}>
+                  <planeGeometry args={[1.2, 3.8]} />
+                  <energyBandMaterial ref={(mat: any) => { if (mat) bandMatRefs.current[4] = mat; }} transparent depthWrite={false} blending={AdditiveBlending} toneMapped={false} opacity={0.75} flow={0.75} color1={palette.primary} color2={palette.accent} side={2} />
+                </mesh>
+                <mesh position={[-1.65, 0.55, 0.5]} rotation={[0, -0.15, 0]}>
+                  <planeGeometry args={[1.2, 3.8]} />
+                  <energyBandMaterial ref={(mat: any) => { if (mat) bandMatRefs.current[5] = mat; }} transparent depthWrite={false} blending={AdditiveBlending} toneMapped={false} opacity={0.75} flow={0.75} color1={palette.primary} color2={palette.accent} side={2} />
+                </mesh>
+                <mesh position={[0, 0.62, -0.55]} rotation={[Math.PI / 2, 0, 0]}>
+                  <torusGeometry args={[1.35, 0.02, 12, 64]} />
+                  <energyBandMaterial ref={(mat: any) => { if (mat) bandMatRefs.current[6] = mat; }} transparent depthWrite={false} blending={AdditiveBlending} toneMapped={false} opacity={0.8} flow={0.9} color1={palette.accent} color2={palette.primary} />
+                </mesh>
+              </group>
+            ) : null}
+
+            <mesh position={[0, 0.42, 1.55]}>
+              <boxGeometry args={[1.4, 0.12, 2.2]} />
+              <meshStandardMaterial color="#06070B" metalness={0.9} roughness={0.35} />
+            </mesh>
+
+            {visualPreset !== 'esports' && level !== 'low' ? (
+              <group>
+                {([-2.1, -1.1, 0, 1.1, 2.1] as const).map((z, i) => (
+                  <mesh key={i} position={[0, 0.78, z]} rotation={[0.15, 0, 0]}>
+                    <coneGeometry args={[0.08, 0.5, 10]} />
+                    <meshStandardMaterial color="#0B1220" metalness={0.9} roughness={0.25} emissive={palette.primary} emissiveIntensity={0.28} toneMapped={false} />
+                  </mesh>
+                ))}
+              </group>
+            ) : null}
+
+            <mesh position={[0, 0.62, 2.15]}>
+              <capsuleGeometry args={[0.26, 0.85, 6, 14]} />
+              <meshPhysicalMaterial color={colors.glass} metalness={0.15} roughness={0.08} transmission={0.55} thickness={0.2} clearcoat={1} />
+            </mesh>
+
+            <mesh position={[0, 0.06, 0.2]}>
+              <boxGeometry args={[3.8, 0.05, 3.2]} />
+              <meshStandardMaterial color="#030307" metalness={0.8} roughness={0.55} />
+            </mesh>
+
+            {visualPreset !== 'esports' && level !== 'low' ? (
+              <group>
+                <mesh position={[1.45, 0.12, 0.1]}>
+                  <boxGeometry args={[0.08, 0.04, 6.0]} />
+                  <meshBasicMaterial color={palette.primary} transparent opacity={0.55} blending={AdditiveBlending} toneMapped={false} depthWrite={false} />
+                </mesh>
+                <mesh position={[-1.45, 0.12, 0.1]}>
+                  <boxGeometry args={[0.08, 0.04, 6.0]} />
+                  <meshBasicMaterial color={palette.primary} transparent opacity={0.55} blending={AdditiveBlending} toneMapped={false} depthWrite={false} />
+                </mesh>
+              </group>
+            ) : null}
+
+            <mesh position={[0, 0.55, 0.4]} rotation={[Math.PI / 2, 0, 0]}>
+              <torusGeometry args={[1.35, 0.04, 12, 64]} />
+              {/* @ts-ignore */}
+              <mythicShieldMaterial ref={(mat: any) => { if (mat) shieldMatRefs.current[1] = mat; }} transparent side={2} depthWrite={false} blending={AdditiveBlending} />
+            </mesh>
+
+            {visualPreset !== 'esports' && level !== 'low' ? (
+              <Float speed={0.9} floatIntensity={0.25} rotationIntensity={0.2}>
+                <group position={[0, 1.15, 1.6]}>
+                  <mesh rotation={[Math.PI / 2, 0, 0]}>
+                    <ringGeometry args={[0.26, 0.34, 48]} />
+                    <meshBasicMaterial color={palette.primary} transparent opacity={0.6} blending={AdditiveBlending} toneMapped={false} depthWrite={false} />
+                  </mesh>
+                  <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, 0, 0.01]}>
+                    <circleGeometry args={[0.22, 32]} />
+                    <energyBandMaterial ref={(mat: any) => { if (mat) bandMatRefs.current[7] = mat; }} transparent depthWrite={false} blending={AdditiveBlending} toneMapped={false} opacity={0.75} flow={0.6} color1={palette.primary} color2={palette.accent} />
+                  </mesh>
+                </group>
+              </Float>
+            ) : null}
+          </group>
+        ) : (
+          <group>
+            <group ref={tailAnchorRef} position={[0, 0.28, -2.95]} />
+
+            <mesh position={[0, 0.35, 0.9]} rotation={[Math.PI / 2, 0, 0]} castShadow receiveShadow>
+              <cylinderGeometry args={[0.55, 0.38, 6.2, 18]} />
+              <meshStandardMaterial color={colors.bodyMain} metalness={0.95} roughness={0.22} emissive={palette.primary} emissiveIntensity={skinGlowIntensity * 0.25} toneMapped={false} />
+              {visualPreset !== 'esports' && level !== 'low' ? <Edges threshold={14} color={palette.accent} /> : null}
+            </mesh>
+
+            {visualPreset !== 'esports' && level !== 'low' ? (
+              <group>
+                <mesh position={[3.45, 0.35, 0.95]} rotation={[0, -0.18, 0]}>
+                  <planeGeometry args={[1.1, 3.3]} />
+                  <energyBandMaterial ref={(mat: any) => { if (mat) bandMatRefs.current[8] = mat; }} transparent depthWrite={false} blending={AdditiveBlending} toneMapped={false} opacity={0.8} flow={1.25} color1={palette.accent} color2={palette.primary} side={2} />
+                </mesh>
+                <mesh position={[-3.45, 0.35, 0.95]} rotation={[0, 0.18, 0]}>
+                  <planeGeometry args={[1.1, 3.3]} />
+                  <energyBandMaterial ref={(mat: any) => { if (mat) bandMatRefs.current[9] = mat; }} transparent depthWrite={false} blending={AdditiveBlending} toneMapped={false} opacity={0.8} flow={1.25} color1={palette.accent} color2={palette.primary} side={2} />
+                </mesh>
+                <mesh position={[0, 0.6, -0.4]} rotation={[Math.PI / 2, 0, 0]}>
+                  <torusGeometry args={[1.25, 0.018, 12, 64]} />
+                  <energyBandMaterial ref={(mat: any) => { if (mat) bandMatRefs.current[10] = mat; }} transparent depthWrite={false} blending={AdditiveBlending} toneMapped={false} opacity={0.85} flow={1.0} color1={palette.primary} color2={palette.accent} />
+                </mesh>
+              </group>
+            ) : null}
+
+            <mesh position={[0, 0.45, 2.65]} rotation={[Math.PI / 2, 0, 0]}>
+              <coneGeometry args={[0.42, 1.35, 18]} />
+              <meshStandardMaterial color="#0B1220" metalness={0.95} roughness={0.22} />
+            </mesh>
+
+            <mesh position={[0, 0.72, 1.95]}>
+              <sphereGeometry args={[0.42, 18, 18]} />
+              <meshPhysicalMaterial color={colors.glass} metalness={0.15} roughness={0.06} transmission={0.65} thickness={0.22} clearcoat={1} />
+            </mesh>
+
+            <group>
+              <mesh position={[3.25, 0.22, 0.65]} rotation={[0, -0.2, 0]}>
+                <boxGeometry args={[2.6, 0.08, 1.2]} />
+                <meshStandardMaterial color="#05050B" metalness={0.85} roughness={0.32} emissive={palette.accent} emissiveIntensity={level === 'ultra' ? 0.22 : 0.14} toneMapped={false} />
+              </mesh>
+              <mesh position={[-3.25, 0.22, 0.65]} rotation={[0, 0.2, 0]}>
+                <boxGeometry args={[2.6, 0.08, 1.2]} />
+                <meshStandardMaterial color="#05050B" metalness={0.85} roughness={0.32} emissive={palette.accent} emissiveIntensity={level === 'ultra' ? 0.22 : 0.14} toneMapped={false} />
+              </mesh>
+            </group>
+
+            {visualPreset !== 'esports' && level !== 'low' ? (
+              <group>
+                {([0, 1, 2, 3] as const).map((i) => (
+                  <group key={i} position={[0, 0.36, -0.25 - i * 0.55]}>
+                    <mesh position={[2.95, 0.12, 0.9]} rotation={[0.05, -0.35, 0]}>
+                      <planeGeometry args={[0.85, 0.95]} />
+                      <energyBandMaterial ref={(mat: any) => { if (mat) bandMatRefs.current[12 + i * 2] = mat; }} transparent depthWrite={false} blending={AdditiveBlending} toneMapped={false} opacity={0.65} flow={1.1} color1={palette.accent} color2={palette.primary} side={2} />
+                    </mesh>
+                    <mesh position={[-2.95, 0.12, 0.9]} rotation={[0.05, 0.35, 0]}>
+                      <planeGeometry args={[0.85, 0.95]} />
+                      <energyBandMaterial ref={(mat: any) => { if (mat) bandMatRefs.current[13 + i * 2] = mat; }} transparent depthWrite={false} blending={AdditiveBlending} toneMapped={false} opacity={0.65} flow={1.1} color1={palette.accent} color2={palette.primary} side={2} />
+                    </mesh>
+                  </group>
+                ))}
+              </group>
+            ) : null}
+
+            <group position={[0, 0.35, -2.25]}>
+              <mesh position={[0.95, 0.0, 0]} rotation={[Math.PI / 2, 0, 0]}>
+                <cylinderGeometry args={[0.26, 0.36, 2.4, 18]} />
+                <meshStandardMaterial color="#0B1220" metalness={0.95} roughness={0.2} emissive={palette.accent} emissiveIntensity={level === 'ultra' ? 0.28 : 0.18} toneMapped={false} />
+              </mesh>
+              <mesh position={[-0.95, 0.0, 0]} rotation={[Math.PI / 2, 0, 0]}>
+                <cylinderGeometry args={[0.26, 0.36, 2.4, 18]} />
+                <meshStandardMaterial color="#0B1220" metalness={0.95} roughness={0.2} emissive={palette.accent} emissiveIntensity={level === 'ultra' ? 0.28 : 0.18} toneMapped={false} />
+              </mesh>
+              <mesh ref={afterburnerMeshRef} position={[0, -0.6, -0.15]} rotation={[Math.PI / 2, 0, 0]} visible={false}>
+                <coneGeometry args={[0.7, 2.0, 20]} />
+                <meshBasicMaterial ref={afterburnerMatRef} color={colors.engine} transparent opacity={0.2} depthWrite={false} blending={AdditiveBlending} toneMapped={false} />
+              </mesh>
+            </group>
+
+            <mesh position={[0, 0.6, 0.6]} rotation={[Math.PI / 2, 0, 0]}>
+              <torusGeometry args={[1.25, 0.035, 12, 64]} />
+              {/* @ts-ignore */}
+              <mythicShieldMaterial ref={(mat: any) => { if (mat) shieldMatRefs.current[2] = mat; }} transparent side={2} depthWrite={false} blending={AdditiveBlending} />
+            </mesh>
+
+            {visualPreset !== 'esports' && level !== 'low' ? (
+              <Float speed={1.1} floatIntensity={0.3} rotationIntensity={0.25}>
+                <group position={[0, 1.25, 1.55]}>
+                  <mesh rotation={[Math.PI / 2, 0, 0]}>
+                    <ringGeometry args={[0.24, 0.32, 48]} />
+                    <meshBasicMaterial color={palette.accent} transparent opacity={0.65} blending={AdditiveBlending} toneMapped={false} depthWrite={false} />
+                  </mesh>
+                  <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, 0, 0.01]}>
+                    <circleGeometry args={[0.2, 32]} />
+                    <energyBandMaterial ref={(mat: any) => { if (mat) bandMatRefs.current[11] = mat; }} transparent depthWrite={false} blending={AdditiveBlending} toneMapped={false} opacity={0.82} flow={0.9} color1={palette.accent} color2={palette.primary} />
+                  </mesh>
+                </group>
+              </Float>
+            ) : null}
           </group>
         )}
-        
-        {/* === 底部霓虹 (Underglow) === */}
-        <pointLight position={[0, -0.2, 0]} distance={5} intensity={3} color={colors.glow} />
-      </group>
 
-      {/* === 轮毂系统 (仅 Car 模式) === */}
-      {vehicleMode === 'car' && (
-          <>
-            <BladeWheel ref={wheelFLRef} position={[-0.9, 0.35, 1.4]} side="left" colors={colors} />
-            <BladeWheel ref={wheelFRRef} position={[0.9, 0.35, 1.4]} side="right" colors={colors} />
-            <BladeWheel ref={wheelBLRef} position={[-0.95, 0.38, -1.2]} side="left" colors={colors} isRear />
-            <BladeWheel ref={wheelBRRef} position={[0.95, 0.38, -1.2]} side="right" colors={colors} isRear />
-          </>
-      )}
-      
-      {/* === 喷射引擎 (Jet 模式) === */}
-      {vehicleMode === 'jet' && (
-           <group position={[0, 0.5, -2.5]}>
-                <mesh rotation={[Math.PI/2, 0, 0]}>
-                    <cylinderGeometry args={[0.4, 0.6, 1.0, 16]} />
-                    <meshStandardMaterial color="#333" />
-                </mesh>
-                <mesh position={[0, -0.6, 0]} rotation={[Math.PI/2, 0, 0]}>
-                     <coneGeometry args={[0.35, 0.8, 16]} />
-                     <meshBasicMaterial color={colors.engine} />
-                </mesh>
-                <mesh ref={afterburnerMeshRef} position={[0, -1.2, 0]} rotation={[Math.PI / 2, 0, 0]} visible={false}>
-                     <coneGeometry args={[0.55, 1.6, 20]} />
-                     <meshBasicMaterial ref={afterburnerMatRef} color={colors.engine} transparent opacity={0.2} depthWrite={false} blending={AdditiveBlending} toneMapped={false} />
-                </mesh>
-           </group>
-      )}
+        <pointLight position={[0, -0.2, 0]} distance={7} intensity={underglowIntensity} color={colors.glow} />
+      </group>
     </group>
   );
 });
-
-// 子组件：刀片式轮毂
-const BladeWheel = memo(forwardRef(({ position, side, colors, isRear }: any, ref: any) => {
-    const width = isRear ? 0.5 : 0.4;
-    const radius = isRear ? 0.38 : 0.35;
-    
-    return (
-        <group ref={ref} position={position}>
-            <group rotation={[0, 0, Math.PI / 2]}>
-                <mesh rotation={[Math.PI/2, 0, 0]}>
-                    <cylinderGeometry args={[radius, radius, width, 24]} />
-                    <meshStandardMaterial color={colors.tire} roughness={0.9} />
-                </mesh>
-                <mesh rotation={[Math.PI/2, 0, 0]}>
-                    <cylinderGeometry args={[radius * 0.7, radius * 0.7, width + 0.02, 16]} />
-                    <meshStandardMaterial color={colors.rim} metalness={0.9} roughness={0.2} />
-                </mesh>
-                {[0, 60, 120, 180, 240, 300].map((angle, i) => (
-                    <mesh key={i} rotation={[0, angle * Math.PI/180, 0]}>
-                        <boxGeometry args={[width + 0.04, 0.05, radius * 1.2]} />
-                        <meshPhysicalMaterial emissiveIntensity={2} toneMapped={false}>
-                            <GradientTexture stops={[0, 1]} colors={["#9945FF", "#14F195"]} />
-                        </meshPhysicalMaterial>
-                    </mesh>
-                ))}
-            </group>
-        </group>
-    );
-}));

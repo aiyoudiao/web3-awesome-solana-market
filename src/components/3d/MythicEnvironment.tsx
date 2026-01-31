@@ -1,4 +1,4 @@
-import { Grid, Stars, Cloud, Sky } from '@react-three/drei';
+import { Grid, Stars, Cloud, Sky, MeshReflectorMaterial } from '@react-three/drei';
 import { memo, useMemo } from 'react';
 import { useStore } from '@/lib/store';
 import { Aurora, MythicWater } from './MythicEffects';
@@ -18,12 +18,25 @@ const LandEnvironment = memo(() => {
     return 1200;
   }, [level]);
 
+  const gridColors = useMemo(() => {
+    if (visualPreset === 'esports') {
+      return { cell: palette.primary, section: palette.accent };
+    }
+    return { cell: '#B026FF', section: '#00F0FF' };
+  }, [palette.accent, palette.primary, visualPreset]);
+
   const grid = useMemo(() => {
-    if (level === 'low') return { cellSize: 6, sectionSize: 60, fadeDistance: 90 };
-    if (level === 'medium') return { cellSize: 5, sectionSize: 50, fadeDistance: 110 };
-    if (level === 'high') return { cellSize: 4, sectionSize: 40, fadeDistance: 130 };
-    return { cellSize: 4, sectionSize: 40, fadeDistance: 160 };
-  }, [level]);
+    if (visualPreset === 'esports') {
+      if (level === 'low') return { cellSize: 6, sectionSize: 48, fadeDistance: 80, cellThickness: 0.4, sectionThickness: 1.1 };
+      if (level === 'medium') return { cellSize: 5, sectionSize: 45, fadeDistance: 95, cellThickness: 0.45, sectionThickness: 1.2 };
+      if (level === 'high') return { cellSize: 4.5, sectionSize: 42, fadeDistance: 110, cellThickness: 0.5, sectionThickness: 1.3 };
+      return { cellSize: 4.5, sectionSize: 42, fadeDistance: 120, cellThickness: 0.55, sectionThickness: 1.35 };
+    }
+    if (level === 'low') return { cellSize: 4.5, sectionSize: 45, fadeDistance: 120, cellThickness: 0.22, sectionThickness: 2.6 };
+    if (level === 'medium') return { cellSize: 4.0, sectionSize: 40, fadeDistance: 170, cellThickness: 0.18, sectionThickness: 3.0 };
+    if (level === 'high') return { cellSize: 3.5, sectionSize: 35, fadeDistance: 220, cellThickness: 0.16, sectionThickness: 3.6 };
+    return { cellSize: 3.2, sectionSize: 32, fadeDistance: 280, cellThickness: 0.14, sectionThickness: 4.2 };
+  }, [level, visualPreset]);
 
   const runeMap = useMemo(() => {
     const tex = createRuneTexture({
@@ -36,6 +49,21 @@ const LandEnvironment = memo(() => {
     tex.repeat.set(6, 6);
     return tex;
   }, []);
+
+  const floor = useMemo<null | { blur: [number, number]; resolution: number; mixBlur: number; mixStrength: number; roughness: number; mirror: number }>(() => {
+    if (level === 'low') return null;
+    if (visualPreset === 'esports') return null;
+
+    if (visualPreset === 'neon') {
+      if (level === 'medium') return { blur: [260, 60], resolution: 256, mixBlur: 0.9, mixStrength: 1.6, roughness: 0.22, mirror: 0.7 };
+      if (level === 'high') return { blur: [320, 80], resolution: 512, mixBlur: 1.1, mixStrength: 1.9, roughness: 0.18, mirror: 0.76 };
+      return { blur: [380, 100], resolution: 512, mixBlur: 1.3, mixStrength: 2.15, roughness: 0.16, mirror: 0.82 };
+    }
+
+    if (level === 'medium') return { blur: [220, 50], resolution: 256, mixBlur: 0.75, mixStrength: 1.15, roughness: 0.28, mirror: 0.62 };
+    if (level === 'high') return { blur: [260, 60], resolution: 512, mixBlur: 0.85, mixStrength: 1.25, roughness: 0.24, mirror: 0.66 };
+    return { blur: [300, 70], resolution: 512, mixBlur: 0.95, mixStrength: 1.35, roughness: 0.22, mirror: 0.7 };
+  }, [level, visualPreset]);
 
   return (
     <>
@@ -50,15 +78,33 @@ const LandEnvironment = memo(() => {
       />
       <fog attach="fog" args={[palette.fog, 30, 180]} />
       {starCount > 0 ? <Stars radius={260} depth={40} count={starCount} factor={3} fade speed={0.5} /> : null}
+      {floor ? (
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.02, 0]}>
+          <planeGeometry args={[420, 420]} />
+          <MeshReflectorMaterial
+            blur={floor.blur}
+            resolution={floor.resolution}
+            mixBlur={floor.mixBlur}
+            mixStrength={floor.mixStrength}
+            roughness={floor.roughness}
+            depthScale={0.35}
+            minDepthThreshold={0.28}
+            maxDepthThreshold={1.2}
+            color="#050505"
+            metalness={0.8}
+            mirror={floor.mirror}
+          />
+        </mesh>
+      ) : null}
       <Grid
         position={[0, -0.01, 0]}
         args={[320, 320]}
         cellSize={grid.cellSize}
-        cellThickness={0.6}
-        cellColor={palette.primary}
+        cellThickness={grid.cellThickness}
+        cellColor={gridColors.cell}
         sectionSize={grid.sectionSize}
-        sectionThickness={1.2}
-        sectionColor={palette.accent}
+        sectionThickness={grid.sectionThickness}
+        sectionColor={gridColors.section}
         fadeDistance={grid.fadeDistance}
         infiniteGrid
       />
@@ -80,8 +126,13 @@ const LandEnvironment = memo(() => {
 });
 
 const OceanEnvironment = memo(() => {
-    const { shadows, shadowMapSize, visualPreset } = useQualityStore();
+    const { level, shadows, shadowMapSize, visualPreset } = useQualityStore();
     const palette = TRINITY_MODES.yacht.environment.palette;
+
+    const gridColors = useMemo(() => {
+        if (visualPreset === 'esports') return { cell: palette.accent, section: palette.primary };
+        return { cell: '#B026FF', section: '#00F0FF' };
+    }, [palette.accent, palette.primary, visualPreset]);
 
     return (
         <>
@@ -103,13 +154,13 @@ const OceanEnvironment = memo(() => {
             <Grid 
                 position={[0, -5, 0]}
                 args={[500, 500]} 
-                cellSize={4} 
-                cellThickness={1} 
-                cellColor={palette.primary} 
-                sectionSize={40} 
-                sectionThickness={2} 
-                sectionColor={palette.accent} 
-                fadeDistance={100} 
+                cellSize={visualPreset === 'esports' ? 5 : 4} 
+                cellThickness={visualPreset === 'esports' ? 0.55 : level === 'ultra' ? 0.16 : level === 'high' ? 0.18 : 0.22} 
+                cellColor={gridColors.cell} 
+                sectionSize={visualPreset === 'esports' ? 50 : 36} 
+                sectionThickness={visualPreset === 'esports' ? 1.2 : level === 'ultra' ? 3.6 : level === 'high' ? 3.2 : 2.6} 
+                sectionColor={gridColors.section} 
+                fadeDistance={visualPreset === 'esports' ? 80 : level === 'ultra' ? 220 : level === 'high' ? 190 : 150} 
                 infiniteGrid 
             />
         </>
@@ -153,6 +204,21 @@ const SkyEnvironment = memo(() => {
       <Cloud position={[-120, 40, -220]} opacity={cloudOpacity} speed={0.12} segments={cloudSegments} scale={60} />
       <Cloud position={[90, 55, -260]} opacity={cloudOpacity} speed={0.14} segments={cloudSegments} scale={80} />
       <Cloud position={[0, 28, -180]} opacity={cloudOpacity} speed={0.1} segments={cloudSegments} scale={120} />
+
+      {visualPreset !== 'esports' && level !== 'low' ? (
+        <Grid
+          position={[0, -30, 0]}
+          args={[1200, 1200]}
+          cellSize={18}
+          cellThickness={0.25}
+          cellColor={'#B026FF'}
+          sectionSize={180}
+          sectionThickness={2.8}
+          sectionColor={'#00F0FF'}
+          fadeDistance={750}
+          infiniteGrid
+        />
+      ) : null}
 
       <group position={[0, 70, -420]} rotation={[0.2, 0.6, 0]}>
         <mesh>

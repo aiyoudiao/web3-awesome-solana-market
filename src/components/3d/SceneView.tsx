@@ -21,7 +21,7 @@ import { Speedometer } from './Speedometer';
 import { CameraMode } from './CameraFollower';
 import { VehicleHUD } from './VehicleHUD';
 import { Vector2 } from 'three';
-import { computeEffectiveDpr, shouldEnableChromaticAberration, shouldEnableComposer, shouldEnableDof } from '@/mythic/visualPresets';
+import { computeEffectiveDpr, getBloomParams, shouldEnableBloom, shouldEnableChromaticAberration, shouldEnableComposer, shouldEnableDof } from '@/mythic/visualPresets';
 import { TRINITY_MODES } from '@/mythic/trinity';
 
 /**
@@ -194,6 +194,8 @@ export const SceneView = () => {
   const effectiveDpr = useMemo(() => computeEffectiveDpr(dpr, visualPreset), [dpr, visualPreset]);
   const effectiveShadows = useMemo(() => (visualPreset === 'esports' ? false : shadows), [shadows, visualPreset]);
   const enableComposer = useMemo(() => shouldEnableComposer(visualPreset, bloom, vehicleMode), [bloom, vehicleMode, visualPreset]);
+  const bloomEnabled = useMemo(() => shouldEnableBloom(visualPreset, bloom), [bloom, visualPreset]);
+  const bloomParams = useMemo(() => getBloomParams(visualPreset, level), [level, visualPreset]);
   const enableChromaticAberration = useMemo(() => shouldEnableChromaticAberration(visualPreset, vehicleMode), [vehicleMode, visualPreset]);
   
   // 虚拟摇杆状态
@@ -301,8 +303,8 @@ export const SceneView = () => {
         {enableComposer && (
           <EffectComposer enableNormalPass={false}>
             <group>
-              {bloom ? (
-                <Bloom luminanceThreshold={1.5} intensity={bloomIntensity} radius={0.8} mipmapBlur />
+              {bloomEnabled ? (
+                <Bloom luminanceThreshold={bloomParams.threshold} intensity={bloomParams.intensity * bloomIntensity} radius={bloomParams.radius} mipmapBlur />
               ) : null}
               {enableChromaticAberration ? (
                 <ChromaticAberration
