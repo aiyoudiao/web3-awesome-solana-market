@@ -26,9 +26,9 @@ export const CyberQR: React.FC<CyberQRProps> = ({
         image: logo,
         margin: 0,
         qrOptions: {
-            typeNumber: 12,
+            typeNumber: 11,
             mode: 'Byte',
-            errorCorrectionLevel: 'Q'
+            errorCorrectionLevel: 'H'
         },
         imageOptions: {
             saveAsBlob: true,
@@ -141,6 +141,6 @@ export const CyberQR: React.FC<CyberQRProps> = ({
   }, [value, size, qrCode]);
 
   return (
-    <div ref={ref} className="cyber-qr-container h-full w-full" />
+    <div ref={ref} className="cyber-qr-container h-full w-full scale-150" />
   );
 };
