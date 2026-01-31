@@ -8,6 +8,9 @@ import { useWallet } from "@solana/wallet-adapter-react";
 import { toPng } from "html-to-image";
 import { CyberQR } from "@/components/ui/CyberQR";
 import { clsx } from "clsx";
+import { buildMarketUrlFromLocation } from "@/lib/formatters";
+
+
 
 function ChallengeContent() {
   const searchParams = useSearchParams();
@@ -22,10 +25,8 @@ function ChallengeContent() {
   const [currentUrl, setCurrentUrl] = useState('');
 
   useEffect(() => {
-    setCurrentUrl(window.location.href);
+    setCurrentUrl(buildMarketUrlFromLocation());
   }, []);
-
-  const finalShareUrl = currentUrl || `https://prediction-market-dapp.netlify.app/market/${marketId}`;
 
   const handleDownload = async () => {
     if (!cardRef.current) return;
@@ -49,7 +50,7 @@ function ChallengeContent() {
   };
 
   const handleShare = () => {
-    const url = window.location.href; // Or the market URL
+    const url = buildMarketUrlFromLocation(); // Or the market URL
     const text = `${tauntMessage}\n${url}`;
     navigator.clipboard.writeText(text);
     setIsCopied(true);
@@ -57,7 +58,7 @@ function ChallengeContent() {
   };
 
   const handleTwitterShare = () => {
-    const shareUrl = encodeURIComponent(window.location.href);
+    const shareUrl = encodeURIComponent(buildMarketUrlFromLocation());
     const text = encodeURIComponent(`${tauntMessage} 🚀\n\nBet on this market now on SolPredict! #Solana #PredictionMarket`);
     window.open(`https://twitter.com/intent/tweet?text=${text}&url=${shareUrl}`, '_blank');
   };
@@ -161,7 +162,7 @@ function ChallengeContent() {
                  <div className="relative group">
                     <div className="absolute -inset-1 bg-gradient-to-br from-[#9945FF] to-[#14F195] rounded-lg blur opacity-40"></div>
                     <div className="relative bg-black p-0 rounded-lg border border-white/10">
-                        <CyberQR value={finalShareUrl} size={80} />
+                        <CyberQR value={currentUrl} size={80} />
                     </div>
                  </div>
               </div>

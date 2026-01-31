@@ -18,7 +18,7 @@ if (typeof window !== 'undefined') {
   (globalThis as any).Buffer = Buffer;
 }
 
-const ADMIN_WALLET = "8R7TCzkhdURCAWdwEiqbZAFVnRNkXVCG4XVgHjLGhUNH";
+const ADMIN_WALLET = ["8R7TCzkhdURCAWdwEiqbZAFVnRNkXVCG4XVgHjLGhUNH"];
 
 export default function AdminPage() {
   const { publicKey } = useWallet();
@@ -31,7 +31,7 @@ export default function AdminPage() {
   const { data: pendingEvents, isLoading } = useQuery({
     queryKey: ['adminEvents', 'pending'],
     queryFn: () => api.getAdminEvents('pending'),
-    enabled: !!walletAddress && walletAddress === ADMIN_WALLET
+    enabled: !!walletAddress &&  ADMIN_WALLET.includes(walletAddress)
   });
 
   const updateStatusMutation = useMutation({
@@ -113,7 +113,7 @@ export default function AdminPage() {
     );
   }
 
-  if (walletAddress !== ADMIN_WALLET) {
+  if (!ADMIN_WALLET.includes(walletAddress)) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
         <XCircle className="w-12 h-12 text-red-500" />
@@ -128,7 +128,7 @@ export default function AdminPage() {
       <div className="flex items-center justify-between mb-8">
         <h1 className="text-3xl font-bold font-heading">管理员控制台</h1>
         <div className="text-sm text-muted-foreground font-mono bg-secondary/20 px-4 py-2 rounded">
-          Admin: {ADMIN_WALLET.slice(0, 6)}...{ADMIN_WALLET.slice(-4)}
+          Admin: {walletAddress.slice(0, 6)}...{walletAddress.slice(-4)}
         </div>
       </div>
 

@@ -1,3 +1,5 @@
+'use client';
+
 import { useRef, useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Html, Float, Grid } from '@react-three/drei';
@@ -11,6 +13,7 @@ import { clsx } from 'clsx';
 import { useRouter } from 'next/navigation';
 import { toast } from "sonner";
 import { CyberQR } from '../ui/CyberQR';
+import { buildMarketUrlFromLocation } from '@/lib/formatters';
 
 export const Challenge3D = () => {
   const router = useRouter();
@@ -28,10 +31,8 @@ export const Challenge3D = () => {
   const [currentUrl, setCurrentUrl] = useState('');
 
   useEffect(() => {
-    setCurrentUrl(window.location.href);
+    setCurrentUrl(buildMarketUrlFromLocation());
   }, []);
-
-  const finalShareUrl = currentUrl || `https://prediction-market-dapp.netlify.app/market/${marketId}`;
 
   // 装饰环动画
   useFrame((state) => {
@@ -62,8 +63,8 @@ export const Challenge3D = () => {
   };
 
   const handleShare = () => {
-    const url = typeof window !== 'undefined' ? window.location.href : '';
-    const text = encodeURIComponent(`${tauntMessage} 🚀\n\nPredict on this market now on SolPredict! #Solana #PredictionMarket`);
+    const url = buildMarketUrlFromLocation();
+    const text = `${tauntMessage}\n${url}`;;
     navigator.clipboard.writeText(text);
     setIsCopied(true);
     setTimeout(() => setIsCopied(false), 2000);
@@ -209,7 +210,7 @@ export const Challenge3D = () => {
                         <div className="relative group">
                             <div className="absolute -inset-1 bg-gradient-to-br from-[#9945FF] to-[#14F195] rounded-lg blur opacity-40"></div>
                             <div className="relative bg-black p-1 rounded-lg border border-white/10">
-                                <CyberQR value={finalShareUrl} size={64} />
+                                <CyberQR value={currentUrl} size={64} />
                             </div>
                         </div>
                     </div>

@@ -68,3 +68,21 @@ export const transformEventToMarket = (
     trendingScore: 0, // 默认值
   };
 };
+
+/**
+ * 从当前 URL 中提取 pathname 和 querystring 里的 id，
+ * 并拼接成 `${pathname}/market/${id}`
+ */
+export function buildMarketUrlFromLocation() {
+  const { origin, search } = window.location;
+
+  // 使用 URLSearchParams 解析 querystring
+  const params = new URLSearchParams(search);
+  const id = params.get("id");
+
+  if (!id) {
+    throw new Error("URL 中未找到 id 参数");
+  }
+
+  return `${origin}/market/${id}`;
+}
