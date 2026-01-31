@@ -9,6 +9,7 @@ import { useFrame } from '@react-three/fiber';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { useWallet } from '@solana/wallet-adapter-react';
+import { toast } from "sonner";
 
 /**
  * 3D 市场详情页组件
@@ -42,12 +43,12 @@ export const MarketDetail3D = () => {
   const placeBetMutation = useMutation({
     mutationFn: api.placeBet,
     onSuccess: (data) => {
-      alert(`下注成功！交易哈希: ${data.txId}`);
+      toast.success(`下注成功！`, { description: `交易哈希: ${data.txId}` });
       setBetAmount(0);
       setSelectedSide(null);
     },
     onError: (err) => {
-      alert("下注失败: " + err);
+      toast.error("下注失败: " + err);
     }
   });
 
@@ -68,8 +69,9 @@ export const MarketDetail3D = () => {
   // 模拟 active 状态 (API 暂无 status)
   const isActive = !isExpired; 
 
+
   const handleBet = () => {
-    if (!publicKey) return alert("请先连接钱包");
+    if (!publicKey) return toast.error("请先连接钱包");
     if (!selectedSide || betAmount <= 0) return;
 
     placeBetMutation.mutate({
@@ -81,7 +83,7 @@ export const MarketDetail3D = () => {
   };
 
   const handleClaim = () => {
-      alert("功能开发中...");
+      toast.info("功能开发中...");
   };
 
   return (

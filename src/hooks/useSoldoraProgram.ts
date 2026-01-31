@@ -8,6 +8,7 @@ import {
   TOKEN_PROGRAM_ID,
 } from "@solana/spl-token";
 import { Buffer } from "buffer";
+import { toast } from "sonner";
 
 import { useState } from 'react';
 import { useSoldora } from '@/hooks/useSoldora';
@@ -26,10 +27,10 @@ export function useSoldoraProgram() {
       setLoading(true);
       const signature = await connection.requestAirdrop(publicKey, 10 * LAMPORTS_PER_SOL);
       await connection.confirmTransaction(signature, "confirmed");
-      alert("空投成功！已获得 10 SOL");
+      toast.success("空投成功！已获得 10 SOL");
     } catch (e) {
       console.error(e);
-      alert("空投失败，请检查本地网络是否启动 (solana-test-validator)");
+      toast.error("空投失败，请检查本地网络是否启动 (solana-test-validator)");
     } finally {
       setLoading(false);
     }
@@ -195,9 +196,9 @@ export function useSoldoraProgram() {
     console.error(e);
     const msg = e.message || e.toString();
     if (msg.includes("Attempt to debit an account but found no record of a prior credit")) {
-      alert(`${actionName}失败：账户余额不足或账户不存在。请先点击右上角的“空投 1 SOL”按钮获取测试币。`);
+      toast.error(`${actionName}失败：账户余额不足或账户不存在。请先点击右上角的“空投 1 SOL”按钮获取测试币。`);
     } else {
-      alert(`${actionName}出错: ` + msg);
+      toast.error(`${actionName}出错: ` + msg);
     }
   };
 
@@ -302,7 +303,7 @@ export function useSoldoraProgram() {
         .rpc();
 
       await fetchState();
-      alert("兑换成功！");
+      toast.success("兑换成功！");
     } catch (e) {
       handleError(e, "兑换");
     } finally {

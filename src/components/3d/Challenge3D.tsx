@@ -9,6 +9,7 @@ import { useWallet } from '@solana/wallet-adapter-react';
 import { toPng } from 'html-to-image';
 import { clsx } from 'clsx';
 import { useRouter } from 'next/navigation';
+import { toast } from "sonner";
 import { CyberQR } from '../ui/CyberQR';
 
 export const Challenge3D = () => {
@@ -56,7 +57,7 @@ export const Challenge3D = () => {
       link.click();
     } catch (err) {
       console.error("Failed to generate image:", err);
-      alert("生成图片失败，请重试");
+      toast.error("生成图片失败，请重试");
     }
   };
 

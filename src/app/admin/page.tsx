@@ -4,6 +4,8 @@
 import { useState, useEffect } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { useConfirm } from "@/components/providers/ConfirmProvider";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Loader2, CheckCircle, XCircle, AlertCircle } from "lucide-react";
@@ -23,6 +25,7 @@ export default function AdminPage() {
   const walletAddress = publicKey?.toBase58();
   const queryClient = useQueryClient();
   const { createEvent } = useSoldoraProgram();
+  const { confirm } = useConfirm();
   const [processingId, setProcessingId] = useState<string | null>(null);
 
   const { data: pendingEvents, isLoading } = useQuery({
@@ -39,13 +42,17 @@ export default function AdminPage() {
       setProcessingId(null);
     },
     onError: (err) => {
-      alert("更新状态失败: " + err.message);
+      toast.error("更新状态失败: " + err.message);
       setProcessingId(null);
     }
   });
 
   const handleApprove = async (event: any) => {
-    if (!confirm(`确定要通过 "${event.title}" 吗？这将调用合约上链。`)) return;
+    if (!await confirm({
+      title: "确认通过",
+      description: `确定要通过 "${event.title}" 吗？这将调用合约上链。`,
+      confirmText: "通过并上链"
+    })) return;
     
     setProcessingId(event.id || event.marketId);
 
@@ -82,13 +89,18 @@ export default function AdminPage() {
 
     } catch (error: any) {
       console.error("Approval failed:", error);
-      alert("上链失败: " + error.message);
+      toast.error("上链失败: " + error.message);
       setProcessingId(null);
     }
   };
 
   const handleReject = async (id: string) => {
-    if (!confirm("确定要拒绝该事件吗？")) return;
+    if (!await confirm({
+      title: "确认拒绝",
+      description: "确定要拒绝该事件吗？",
+      variant: "destructive",
+      confirmText: "拒绝"
+    })) return;
     updateStatusMutation.mutate({ id, status: 'rejected' });
   };
 

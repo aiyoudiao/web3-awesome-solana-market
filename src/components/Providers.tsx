@@ -3,6 +3,7 @@
 import { FC, ReactNode, useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { WalletContextProvider } from './WalletContextProvider';
+import { ConfirmProvider } from '@/components/providers/ConfirmProvider';
 
 export const Providers: FC<{ children: ReactNode }> = ({ children }) => {
   const [queryClient] = useState(() => new QueryClient());
@@ -10,7 +11,9 @@ export const Providers: FC<{ children: ReactNode }> = ({ children }) => {
   return (
     <QueryClientProvider client={queryClient}>
       <WalletContextProvider>
-        {children}
+        <ConfirmProvider>
+          {children}
+        </ConfirmProvider>
       </WalletContextProvider>
     </QueryClientProvider>
   );

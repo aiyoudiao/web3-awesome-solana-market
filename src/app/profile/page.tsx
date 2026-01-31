@@ -3,6 +3,7 @@
 import { Button } from "@/components/ui/button";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { Loader2, ExternalLink, X, Coins, FileText } from "lucide-react";
 import Link from "next/link";
@@ -56,9 +57,10 @@ export default function Profile() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['userProfile', walletAddress] });
       setIsEditing(false);
+      toast.success("个人资料已更新");
     },
     onError: (error) => {
-      alert("更新失败: " + error.message);
+      toast.error("更新失败: " + error.message);
     }
   });
 

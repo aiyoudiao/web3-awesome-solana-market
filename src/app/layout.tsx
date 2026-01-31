@@ -5,6 +5,7 @@ import "./globals.css";
 import { Providers } from "@/components/Providers";
 import { AppEffects } from "@/components/AppEffects";
 import { ViewController } from "@/components/ViewController";
+import { Toaster } from "@/components/ui/sonner";
 import { Buffer } from 'buffer';
 
 if (typeof window !== 'undefined') {
@@ -35,6 +36,7 @@ export default function RootLayout({
           <ViewController>
             {children}
           </ViewController>
+          <Toaster />
         </Providers>
       </body>
     </html>

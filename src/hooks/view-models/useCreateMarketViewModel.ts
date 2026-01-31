@@ -2,6 +2,7 @@ import { useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useMutation } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { api, GenerateChallengeResponse } from "@/lib/api";
 
 export interface CreateMarketFormData {
@@ -35,14 +36,14 @@ export const useCreateMarketViewModel = () => {
       });
     },
     onSuccess: (data: GenerateChallengeResponse) => {
-      alert(
-        `预测事件已提交审核！\n请等待管理员审核通过后上链。\nEvent ID: ${data.id}`,
-      );
+      toast.success("预测事件已提交审核！", {
+        description: `请等待管理员审核通过后上链。\nEvent ID: ${data.id}`,
+      });
       router.push("/profile");
     },
     onError: (err: Error) => {
       console.error(err);
-      alert("创建失败: " + err.message);
+      toast.error("创建失败: " + err.message);
     },
   });
 
@@ -115,18 +116,18 @@ export const useCreateMarketViewModel = () => {
     e.preventDefault();
 
     if (!publicKey) {
-      alert("请先连接钱包");
+      toast.error("请先连接钱包");
       return;
     }
 
     if (!formData.title.trim() || !formData.description.trim()) {
-      alert("标题和描述不能为空");
+      toast.warning("标题和描述不能为空");
       return;
     }
 
     const endTime = new Date(formData.endTime).getTime();
     if (isNaN(endTime) || endTime <= Date.now()) {
-      alert("截止时间必须大于当前时间");
+      toast.warning("截止时间必须大于当前时间");
       return;
     }
 
