@@ -13,14 +13,45 @@ import { toast } from "sonner";
 import { useState } from 'react';
 import { useSoldora } from '@/hooks/useSoldora';
 
+import { useQuery } from "@tanstack/react-query";
+
 export function useSoldoraProgram() {
   const { program, connection } = useSoldora();
   const { publicKey } = useWallet();
-  const [events, setEvents] = useState<any[]>([]);
-  const [treasury, setTreasury] = useState<any>(null);
   const [loading, setLoading] = useState(false);
 
-  // Request Airdrop
+  // 获取 Treasury 账户
+  const { data: treasury = null, refetch: refetchTreasury } = useQuery({
+    queryKey: ['program-treasury', program?.programId?.toString()],
+    queryFn: async () => {
+      if (!program) return null;
+      const [treasuryPda] = PublicKey.findProgramAddressSync(
+        [Buffer.from("treasury")],
+        program.programId
+      );
+      return await program.account.treasury.fetchNullable(treasuryPda);
+    },
+    enabled: !!program,
+    staleTime: 30000, // 30s cache
+  });
+
+  // 获取所有事件
+  const { data: events = [], refetch: refetchEvents } = useQuery({
+    queryKey: ['program-events', program?.programId?.toString()],
+    queryFn: async () => {
+      if (!program) return [];
+      const eventsData = await program.account.event.all();
+      // 按 uniqueId 降序排序
+      eventsData.sort((a: any, b: any) => b.account.uniqueId.sub(a.account.uniqueId).toNumber());
+      return eventsData;
+    },
+    enabled: !!program,
+    staleTime: 10000, // 10s cache
+  });
+
+  const fetchState = useCallback(async () => {
+    await Promise.all([refetchTreasury(), refetchEvents()]);
+  }, [refetchTreasury, refetchEvents]);
   const requestAirdrop = async () => {
     if (!connection || !publicKey) return;
     try {
@@ -36,9 +67,6 @@ export function useSoldoraProgram() {
     }
   };
 
-  // 表单状态
-  const [description, setDescription] = useState('');
-  const [deadline, setDeadline] = useState('');
   const createEvent = async (title: string, description: string, deadline: number) => {
     if (!program || !publicKey) return { success: false };
     try {
@@ -74,8 +102,6 @@ export function useSoldoraProgram() {
         .rpc();
 
       await fetchState();
-      setDescription('');
-      setDeadline('');
       return { success: true, signature };
     } catch (e) {
       handleError(e, "创建事件");
@@ -84,27 +110,6 @@ export function useSoldoraProgram() {
       setLoading(false);
     }
   };
-
-  const fetchState = useCallback(async () => {
-    if (!program) return;
-    try {
-      // 获取 Treasury 账户
-      const [treasuryPda] = PublicKey.findProgramAddressSync(
-        [Buffer.from("treasury")],
-        program.programId
-      );
-      const treasuryAccount = await program.account.treasury.fetchNullable(treasuryPda);
-      setTreasury(treasuryAccount);
-
-      // 获取所有事件
-      const eventsData = await program.account.event.all();
-      // 按 uniqueId 降序排序
-      eventsData.sort((a, b) => b.account.uniqueId.sub(a.account.uniqueId).toNumber());
-      setEvents(eventsData);
-    } catch (e) {
-      console.error("获取状态出错:", e);
-    }
-  }, [program]);
 
   // 获取用户持仓
   const fetchUserPositions = useCallback(async (walletAddress: string) => {

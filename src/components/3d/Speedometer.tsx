@@ -8,7 +8,7 @@ interface SpeedometerProps {
 /**
  * 赛博朋克风格速度仪表盘
  */
-export const Speedometer = ({ speedRef, maxSpeed = 0.8 }: SpeedometerProps) => {
+export const Speedometer = ({ speedRef, maxSpeed = 0.48 }: SpeedometerProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -23,7 +23,8 @@ export const Speedometer = ({ speedRef, maxSpeed = 0.8 }: SpeedometerProps) => {
 
     const draw = () => {
       const currentSpeed = Math.abs(speedRef.current);
-      const displaySpeed = Math.floor((currentSpeed / maxSpeed) * 200);
+      // 将物理速度映射到显示速度 (max 120 km/h)
+      const displaySpeed = Math.floor(Math.min(currentSpeed / maxSpeed, 1) * 120);
       
       // Optimization: Only redraw if speed value changed significantly
       // We check displaySpeed (integer) to avoid micro-updates

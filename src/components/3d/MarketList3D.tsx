@@ -70,11 +70,17 @@ export const MarketList3D = ({ inputRef, speedRef, cameraMode = 'follow' }: Mark
   // ... (caching logic)
   const marketPositions = useRef<{ id: string; position: Vector3 }[]>([]);
   if (markets && marketPositions.current.length !== markets.length) {
+      const gridSize = Math.ceil(Math.sqrt(markets.length));
+      const spacing = 15; // 市场之间的间距
+      const offset = ((gridSize - 1) * spacing) / 2;
+
       marketPositions.current = markets.map((market, index) => {
-          const angle = (index / markets.length) * Math.PI * 2;
-          const radius = 25; // Scaled down to 50% (was 50)
-          const x = Math.sin(angle) * radius;
-          const z = Math.cos(angle) * radius;
+          const row = Math.floor(index / gridSize);
+          const col = index % gridSize;
+          
+          const x = col * spacing - offset;
+          const z = row * spacing - offset;
+          
           return { id: market.marketId, position: new Vector3(x, 2, z) };
       });
   }
@@ -87,20 +93,33 @@ export const MarketList3D = ({ inputRef, speedRef, cameraMode = 'follow' }: Mark
     return null; 
   }, [targetId]);
 
+  // State for global tooltip
+  const [hoveredMarket, setHoveredMarket] = useState<{ market: Market, position: Vector3 } | null>(null);
+
   // ... (collision logic)
   const handleCollision = useCallback((position: Vector3) => {
-      // 优化：仅每10帧或距离变化较大时检测，这里简单实现距离阈值优化
-      // 实际上 collision 逻辑很快，不需要过度优化，但可以缩小检测半径
+      let foundNearby: { market: Market, position: Vector3 } | null = null;
+      
       for (const item of marketPositions.current) {
           const dx = position.x - item.position.x;
           const dz = position.z - item.position.z;
           const distSq = dx*dx + dz*dz;
-          if (distSq < 4) {
-              handleMarketSelect(item.id);
-              break; 
+          
+          if (distSq < 25) { // 5米范围 (5^2=25)
+             const market = markets.find(m => m.marketId === item.id);
+             if (market) {
+                 foundNearby = { market, position: item.position.clone().add(new Vector3(0, 2, 0)) };
+             }
+             break; 
           }
       }
-  }, [handleMarketSelect]);
+
+      setHoveredMarket(prev => {
+         if (!foundNearby && !prev) return prev;
+         if (foundNearby && prev && foundNearby.market.marketId === prev.market.marketId) return prev;
+         return foundNearby;
+      });
+  }, [markets]);
 
   // Keyboard navigation
   const [focusedIndex, setFocusedIndex] = useState<number>(-1);
@@ -121,8 +140,11 @@ export const MarketList3D = ({ inputRef, speedRef, cameraMode = 'follow' }: Mark
                   }
                   return next;
               });
-          } else if (e.key === 'Enter' && focusedIndex !== -1) {
-              if (markets && markets[focusedIndex]) {
+          } else if (e.key === 'Enter') {
+              // 如果有悬浮的市场（无论是因为靠近还是鼠标悬停），按回车进入
+              if (hoveredMarket) {
+                  handleMarketSelect(hoveredMarket.market.marketId);
+              } else if (focusedIndex !== -1 && markets && markets[focusedIndex]) {
                   handleMarketSelect(markets[focusedIndex].marketId);
               }
           }
@@ -130,10 +152,7 @@ export const MarketList3D = ({ inputRef, speedRef, cameraMode = 'follow' }: Mark
       
       window.addEventListener('keydown', handleKeyDown);
       return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [markets, focusedIndex, handleMarketSelect]);
-
-  // State for global tooltip
-  const [hoveredMarket, setHoveredMarket] = useState<{ market: Market, position: Vector3 } | null>(null);
+  }, [markets, focusedIndex, hoveredMarket, handleMarketSelect]);
 
   // 优化：使用 useCallback 避免每次渲染都创建新函数，导致子组件 MarketInstancedMesh 重渲染
   const handleHover = useCallback((m: Market | null, p: Vector3 | null) => {
@@ -172,18 +191,9 @@ export const MarketList3D = ({ inputRef, speedRef, cameraMode = 'follow' }: Mark
         mode={cameraMode}
       />
       
-      {/* Global Tooltip */}
-      {hoveredMarket && hoveredMarket.position && (
-          <Html position={hoveredMarket.position} center distanceFactor={10} style={{ pointerEvents: 'none' }}>
-              <div className={`w-56 p-4 rounded-xl backdrop-blur-xl border transition-all duration-300 bg-[#1B1B1F]/90 border-[#9945FF] scale-105 shadow-[0_0_30px_rgba(153,69,255,0.6)]`}>
-                  <h3 className="text-sm font-black italic mb-2 line-clamp-2 text-transparent bg-clip-text bg-gradient-to-r from-[#9945FF] to-[#14F195]">{hoveredMarket.market.title}</h3>
-                  <div className="grid grid-cols-[auto_auto] justify-between text-[10px] font-mono mt-3 mb-2">
-                      <span className="text-[#14F195] font-bold">YES: {hoveredMarket.market.odds.yes}%</span>
-                      <span className="text-red-400 font-bold">NO: {hoveredMarket.market.odds.no}%</span>
-                  </div>
-              </div>
-          </Html>
-      )}
+      {/* Global Tooltip (Removed, replaced by individual cards) */}
+
+      {/* Interaction Prompt (Removed, using global tooltip instead) */}
 
       {/* AR Navigation Arrow */}
       {activeTarget && <NavigationArrow target={activeTarget} />}
@@ -198,6 +208,40 @@ export const MarketList3D = ({ inputRef, speedRef, cameraMode = 'follow' }: Mark
               hoveredId={hoveredMarket?.market?.marketId || null}
           />
       )}
+
+      {/* Always Show Market Cards */}
+      {markets && marketPositions.current.map((item, index) => {
+          const market = markets.find(m => m.marketId === item.id);
+          if (!market) return null;
+          
+          const isHovered = hoveredMarket?.market.marketId === market.marketId;
+          
+          return (
+            <Html 
+                key={item.id} 
+                position={[item.position.x, item.position.y + 2, item.position.z]} 
+                center 
+                distanceFactor={12} 
+                style={{ pointerEvents: 'none' }}
+                zIndexRange={[100, 0]}
+            >
+                <div 
+                    className={`w-48 p-3 rounded-lg backdrop-blur-md border transition-all duration-300 
+                    ${isHovered 
+                        ? 'bg-[#1B1B1F]/90 border-[#9945FF] scale-110 shadow-[0_0_30px_rgba(153,69,255,0.6)] z-50' 
+                        : 'bg-black/40 border-white/10 opacity-80 hover:opacity-100'}`}
+                >
+                    <h3 className={`text-xs font-bold mb-1 line-clamp-2 ${isHovered ? 'text-transparent bg-clip-text bg-gradient-to-r from-[#9945FF] to-[#14F195]' : 'text-white'}`}>
+                        {market.title}
+                    </h3>
+                    <div className="flex justify-between text-[8px] font-mono mt-2">
+                        <span className="text-[#14F195]">YES: {market.odds.yes}%</span>
+                        <span className="text-red-400">NO: {market.odds.no}%</span>
+                    </div>
+                </div>
+            </Html>
+          );
+      })}
 
       {/* Highlight Indicator for Hovered Market (Regular Meshes) */}
       {hoveredMarket && hoveredMarket.position && (

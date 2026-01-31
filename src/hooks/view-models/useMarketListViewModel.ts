@@ -13,24 +13,13 @@ export const useMarketListViewModel = () => {
     fetchState();
   }, [fetchState]);
 
-  // 获取参与人数
-  useEffect(() => {
-    const fetchAllParticipants = async () => {
-        if (events.length === 0) return;
-        const map: Record<string, number> = {};
-        for (const ev of events) {
-            const count = await getParticipants(ev.account.yesMint, ev.account.noMint);
-            map[ev.publicKey.toString()] = count;
-        }
-        setParticipantsMap(map);
-    };
-    fetchAllParticipants();
-  }, [events, getParticipants]);
-
+  // 移除高频 RPC 调用：列表页不再自动获取所有参与人数，避免 429 错误
+  // 如果需要显示热度，可以使用简单的链上数据（如总奖池）替代，或者在后端/Indexer层聚合数据
+  
   // 转换数据
   const markets = useMemo(() => {
-    return events.map(event => transformEventToMarket(event, participantsMap[event.publicKey.toString()] || 0));
-  }, [events, participantsMap]);
+    return events.map(event => transformEventToMarket(event, 0));
+  }, [events]);
 
   // 过滤数据
   const filteredMarkets = useMemo(() => {

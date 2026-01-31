@@ -12,7 +12,7 @@ import { Challenge3D } from './Challenge3D';
 import { MiniMap } from './MiniMap';
 import { useMarketListViewModel } from '@/hooks/view-models/useMarketListViewModel';
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { SolanaLightning } from './SolanaLightning';
+// import { SolanaLightning } from './SolanaLightning'; // 雷电特效已移除
 import { EffectComposer, Bloom } from '@react-three/postprocessing';
 import { PerformanceManager } from './PerformanceManager';
 import { useQualityStore, QualityLevel } from '@/stores/useQualityStore';
@@ -291,7 +291,7 @@ export const SceneView = () => {
         )}
 
         <CyberpunkEnvironment />
-        <SolanaLightning />
+        {/* <SolanaLightning /> 雷电特效已移除 */}
         
         {pathname === '/create' ? (
           <CreateMarket3D />

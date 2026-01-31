@@ -2,7 +2,7 @@ import { useRef, memo, useState, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Mesh, Vector3, Group, MathUtils } from 'three';
 import { Trail, Html } from '@react-three/drei';
-import { CarLightningSystem } from './CarLightningSystem';
+// import { CarLightningSystem } from './CarLightningSystem'; // 雷电特效已移除
 import { audioManager } from '@/lib/audio/AudioManager';
 
 interface CyberCarProps {
@@ -45,9 +45,9 @@ export const CyberCar = memo(({ onPositionChange, positionRef, inputRef, heading
 
   // 物理参数配置
   const config = {
-    maxSpeed: 0.8,
-    acceleration: 0.02,
-    deceleration: 0.01,
+    maxSpeed: 0.48, // 降低物理速度以适配 120km/h 的显示，同时增加可控性 (原 0.8)
+    acceleration: 0.012, // 相应调整加速度 (原 0.02)
+    deceleration: 0.006, // 相应调整减速度 (原 0.01)
     friction: 0.98,
     turnSpeed: 0.04,
     driftFactor: 0.95, // 漂移因子 (1 = 无漂移, <1 = 像在冰上)
@@ -279,8 +279,8 @@ export const CyberCar = memo(({ onPositionChange, positionRef, inputRef, heading
 
   return (
     <group ref={groupRef}>
-      {/* 挂载雷电特效系统 (传递速度 Ref) */}
-      <CarLightningSystem speedRef={speed} active={true} />
+      {/* 挂载雷电特效系统 (已移除) */}
+      {/* <CarLightningSystem speedRef={speed} active={true} /> */}
 
       {/* 尾气拖尾效果 */}
       <Trail
